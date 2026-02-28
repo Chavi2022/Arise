@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeft, CheckCircle } from 'lucide-react';
 import CameraChallenge from '../components/CameraChallenge';
 import { EXERCISES, EXERCISE_LIST } from '../utils/exerciseConfig';
-import { getSettings, grantUnlock } from '../utils/storage';
+import { getSettings, grantUnlock, logChallenge } from '../utils/storage';
 
 const STEPS = { PICK: 'pick', INTRO: 'intro', CAMERA: 'camera', SUCCESS: 'success' };
 
@@ -46,6 +46,13 @@ export default function Challenge() {
   }, [step, unlockExpiry]);
 
   const handleComplete = () => {
+    // Log activity
+    logChallenge({
+      reps: chosenExercise?.type === 'reps' ? (targetReps ?? 0) : 0,
+      seconds: chosenExercise?.type === 'hold' ? (targetSeconds ?? 0) : 0,
+      savedMin: app ? settings.unlockMinutes : 0,
+    });
+
     let expiry = null;
     if (app) {
       expiry = grantUnlock(app.id, settings.unlockMinutes);

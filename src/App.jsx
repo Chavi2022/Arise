@@ -4,6 +4,8 @@ import Home from './pages/Home';
 import Challenge from './pages/Challenge';
 import Settings from './pages/Settings';
 import PhoneDemo from './pages/PhoneDemo';
+import Progress from './pages/Progress';
+import Diet from './pages/Diet';
 import './App.css';
 
 export default function App() {
@@ -15,6 +17,8 @@ export default function App() {
           <Routes>
             <Route path="/"          element={<Home />} />
             <Route path="/demo"      element={<PhoneDemo />} />
+            <Route path="/diet"      element={<Diet />} />
+            <Route path="/progress"  element={<Progress />} />
             <Route path="/challenge" element={<Challenge />} />
             <Route path="/settings"  element={<Settings />} />
           </Routes>

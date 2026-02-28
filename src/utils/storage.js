@@ -1,8 +1,12 @@
 const KEYS = {
-  APPS: 'arise_apps',
-  USAGE: 'arise_usage',
+  APPS:    'arise_apps',
+  USAGE:   'arise_usage',
   UNLOCKS: 'arise_unlocks',
-  SETTINGS: 'arise_settings',
+  SETTINGS:'arise_settings',
+  PROGRESS:'arise_progress',
+  DIET:    'arise_diet',
+  WEIGHT:  'arise_weight',
+  DIET_GOALS: 'arise_diet_goals',
 };
 
 export const DEFAULT_APPS = [
@@ -117,6 +121,196 @@ export function getSettings() {
 
 export function saveSettings(s) {
   localStorage.setItem(KEYS.SETTINGS, JSON.stringify(s));
+}
+
+// ---------- progress / activity log ----------
+export function getProgress() {
+  try {
+    const raw = localStorage.getItem(KEYS.PROGRESS);
+    if (!raw) return seedDemoProgress();
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Log a completed challenge.
+ * @param {{ reps?: number, seconds?: number, savedMin?: number }} opts
+ */
+export function logChallenge({ reps = 0, seconds = 0, savedMin = 0 } = {}) {
+  try {
+    const all = getRawProgress();
+    const today = todayKey();
+    if (!all[today]) all[today] = { reps: 0, seconds: 0, challenges: 0, savedMin: 0 };
+    all[today].reps      += reps;
+    all[today].seconds   += seconds;
+    all[today].challenges += 1;
+    all[today].savedMin  += savedMin;
+    localStorage.setItem(KEYS.PROGRESS, JSON.stringify(all));
+  } catch {}
+}
+
+function getRawProgress() {
+  try {
+    const raw = localStorage.getItem(KEYS.PROGRESS);
+    return raw ? JSON.parse(raw) : seedDemoProgress();
+  } catch {
+    return {};
+  }
+}
+
+/** Build a realistic 6-month history so the heatmap looks populated on first launch. */
+function seedDemoProgress() {
+  const data = {};
+  const today = new Date();
+
+  for (let i = 180; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const dow = d.getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    // Recent 9 days = current streak (always active)
+    if (i <= 9) {
+      data[key] = {
+        reps: Math.floor(Math.random() * 25) + 10,
+        seconds: Math.random() > 0.4 ? 60 : 0,
+        challenges: Math.floor(Math.random() * 3) + 1,
+        savedMin: Math.floor(Math.random() * 20) + 10,
+      };
+    } else {
+      // ~70% weekdays, ~45% weekends
+      if (Math.random() > (isWeekend ? 0.45 : 0.30)) continue;
+      data[key] = {
+        reps: Math.floor(Math.random() * 40),
+        seconds: Math.random() > 0.55 ? 60 : 0,
+        challenges: Math.floor(Math.random() * 3),
+        savedMin: Math.floor(Math.random() * 25),
+      };
+    }
+  }
+
+  localStorage.setItem(KEYS.PROGRESS, JSON.stringify(data));
+  return data;
+}
+
+/** Returns the current streak length (consecutive active days ending today). */
+export function getStreak(progress) {
+  let streak = 0;
+  const today = new Date();
+  for (let i = 0; i < 365; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const day = progress[key];
+    if (day && (day.challenges > 0 || day.reps > 0)) {
+      streak++;
+    } else if (i === 0) {
+      // Today hasn't been logged yet — don't break streak
+      continue;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+/** Returns the longest ever streak. */
+export function getLongestStreak(progress) {
+  const days = Object.keys(progress).sort();
+  let best = 0, cur = 0;
+  let prev = null;
+  for (const key of days) {
+    const day = progress[key];
+    if (!day || (day.challenges === 0 && day.reps === 0)) { cur = 0; prev = null; continue; }
+    if (prev) {
+      const p = new Date(prev), c = new Date(key);
+      const diff = (c - p) / 86400000;
+      cur = diff === 1 ? cur + 1 : 1;
+    } else {
+      cur = 1;
+    }
+    if (cur > best) best = cur;
+    prev = key;
+  }
+  return best;
+}
+
+// ---------- diet log ----------
+export const DEFAULT_DIET_GOALS = { calories: 2000, protein: 150, carbs: 250, fat: 65 };
+const MEAL_IDS = ['breakfast', 'lunch', 'dinner', 'snacks'];
+
+export function getDietGoals() {
+  try {
+    const raw = localStorage.getItem(KEYS.DIET_GOALS);
+    return raw ? { ...DEFAULT_DIET_GOALS, ...JSON.parse(raw) } : DEFAULT_DIET_GOALS;
+  } catch { return DEFAULT_DIET_GOALS; }
+}
+export function saveDietGoals(g) { localStorage.setItem(KEYS.DIET_GOALS, JSON.stringify(g)); }
+
+export function getDietLog(date = todayKey()) {
+  try {
+    const raw = localStorage.getItem(KEYS.DIET);
+    const all = raw ? JSON.parse(raw) : {};
+    return all[date] ?? { breakfast: [], lunch: [], dinner: [], snacks: [] };
+  } catch { return { breakfast: [], lunch: [], dinner: [], snacks: [] }; }
+}
+
+export function addFoodToMeal(meal, food, date = todayKey()) {
+  try {
+    const raw = localStorage.getItem(KEYS.DIET);
+    const all = raw ? JSON.parse(raw) : {};
+    if (!all[date]) all[date] = { breakfast: [], lunch: [], dinner: [], snacks: [] };
+    all[date][meal] = [...(all[date][meal] ?? []), { ...food, loggedAt: Date.now() }];
+    localStorage.setItem(KEYS.DIET, JSON.stringify(all));
+  } catch {}
+}
+
+export function removeFoodFromMeal(meal, index, date = todayKey()) {
+  try {
+    const raw = localStorage.getItem(KEYS.DIET);
+    const all = raw ? JSON.parse(raw) : {};
+    if (!all[date]?.[meal]) return;
+    all[date][meal] = all[date][meal].filter((_, i) => i !== index);
+    localStorage.setItem(KEYS.DIET, JSON.stringify(all));
+  } catch {}
+}
+
+// ---------- weight log ----------
+export function logWeight(kg, date = todayKey()) {
+  try {
+    const raw = localStorage.getItem(KEYS.WEIGHT);
+    const all = raw ? JSON.parse(raw) : {};
+    all[date] = kg;
+    localStorage.setItem(KEYS.WEIGHT, JSON.stringify(all));
+  } catch {}
+}
+
+export function getWeightHistory() {
+  try {
+    const raw = localStorage.getItem(KEYS.WEIGHT);
+    if (raw) return JSON.parse(raw);
+    return seedWeightHistory();
+  } catch { return {}; }
+}
+
+function seedWeightHistory() {
+  const data = {};
+  // 28 days of realistic weight data with a slight downward trend
+  const startWeight = 80.2;
+  const today = new Date();
+  for (let i = 27; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    // Trend down ~0.1kg/week with daily noise ±0.4kg
+    const trend = (27 - i) * 0.014;
+    const noise = (Math.sin(i * 7.3) * 0.3 + Math.cos(i * 2.1) * 0.2);
+    data[key] = Math.round((startWeight - trend + noise) * 10) / 10;
+  }
+  localStorage.setItem(KEYS.WEIGHT, JSON.stringify(data));
+  return data;
 }
 
 // ---------- demo helper ----------
