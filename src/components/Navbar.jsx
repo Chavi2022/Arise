@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Dumbbell, Smartphone, Settings } from 'lucide-react';
+import { LayoutDashboard, Smartphone, Salad, BarChart2, Settings } from 'lucide-react';
 
 const tabs = [
-  { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/demo', icon: Smartphone, label: 'Demo' },
-  { path: '/challenge', icon: Dumbbell, label: 'Challenge' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
+  { path: '/',         icon: LayoutDashboard, label: 'Home'     },
+  { path: '/demo',     icon: Smartphone,      label: 'Demo'     },
+  { path: '/diet',     icon: Salad,           label: 'Nutrition'},
+  { path: '/progress', icon: BarChart2,       label: 'Progress' },
+  { path: '/settings', icon: Settings,        label: 'Settings' },
 ];
 
 export default function Navbar() {

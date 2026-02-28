@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { PoseLandmarker, FilesetResolver, DrawingUtils } from '@mediapipe/tasks-vision';
+import { RefreshCw } from 'lucide-react';
 import { useRepCounter, usePlankTimer } from '../hooks/useRepCounter';
 
 // Singleton — only load once
@@ -40,15 +41,17 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
   const lastTimeRef = useRef(-1);
   const completedRef = useRef(false);
 
-  // Keep latest values accessible inside the frame loop via refs
   const exerciseRef = useRef(exercise);
   const processRepAngleRef = useRef(null);
   const processPlankAngleRef = useRef(null);
+  // Store the current facingMode in a ref so frameLoop always knows whether to mirror
+  const facingModeRef = useRef('user');
 
-  const [status, setStatus] = useState('loading'); // loading | countdown | running | done | error
+  const [status, setStatus] = useState('loading');
   const [error, setError] = useState(null);
   const [poseDetected, setPoseDetected] = useState(false);
   const [countdown, setCountdown] = useState(null);
+  const [facingMode, setFacingMode] = useState('user'); // 'user' = front, 'environment' = rear
 
   const isReps = exercise?.type === 'reps';
 
@@ -59,6 +62,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
   useEffect(() => { exerciseRef.current = exercise; }, [exercise]);
   useEffect(() => { processRepAngleRef.current = processRepAngle; }, [processRepAngle]);
   useEffect(() => { processPlankAngleRef.current = processPlankAngle; }, [processPlankAngle]);
+  useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
 
   // Completion detection
   useEffect(() => {
@@ -79,7 +83,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     }
   }, [seconds, targetSeconds, isReps, onComplete]);
 
-  const stopCamera = useCallback(() => {
+  const stopStream = useCallback(() => {
     runningRef.current = false;
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     const stream = videoRef.current?.srcObject;
@@ -104,10 +108,16 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     if (canvas.width !== w) canvas.width = w;
     if (canvas.height !== h) canvas.height = h;
 
-    // Mirror video frame
+    const isFront = facingModeRef.current === 'user';
+
+    // Mirror only for front camera (natural selfie view)
     ctx.save();
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, -w, 0, w, h);
+    if (isFront) {
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -w, 0, w, h);
+    } else {
+      ctx.drawImage(video, 0, 0, w, h);
+    }
     ctx.restore();
 
     if (video.currentTime !== lastTimeRef.current) {
@@ -118,14 +128,17 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
         setPoseDetected(true);
         const landmarks = results.landmarks[0];
 
-        // Draw mirrored skeleton
         const drawingUtils = new DrawingUtils(ctx);
-        const mirrored = landmarks.map((l) => ({ ...l, x: 1 - l.x }));
-        drawingUtils.drawConnectors(mirrored, PoseLandmarker.POSE_CONNECTIONS, {
+        // Mirror landmark x-coordinates only for front camera
+        const displayLandmarks = isFront
+          ? landmarks.map((l) => ({ ...l, x: 1 - l.x }))
+          : landmarks;
+
+        drawingUtils.drawConnectors(displayLandmarks, PoseLandmarker.POSE_CONNECTIONS, {
           color: '#a855f780',
           lineWidth: 3,
         });
-        drawingUtils.drawLandmarks(mirrored, {
+        drawingUtils.drawLandmarks(displayLandmarks, {
           color: '#a855f7',
           fillColor: '#ffffff20',
           radius: 4,
@@ -134,6 +147,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
 
         const ex = exerciseRef.current;
         if (ex) {
+          // Always use original (unmirrored) landmarks for angle calculation
           const angle = ex.getAngle(landmarks);
           if (ex.type === 'reps') processRepAngleRef.current?.(angle, ex);
           else processPlankAngleRef.current?.(angle, ex);
@@ -146,17 +160,15 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     rafRef.current = requestAnimationFrame(frameLoop);
   }, []);
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (facing = facingModeRef.current) => {
+    stopStream();
     setError(null);
     setStatus('loading');
-    completedRef.current = false;
-    resetReps();
-    resetPlank();
 
     try {
       await getPoseLandmarker();
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } },
       });
       if (!videoRef.current) return;
       videoRef.current.srcObject = stream;
@@ -175,11 +187,22 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
       setError(err.message);
       setStatus('error');
     }
-  }, [frameLoop, resetReps, resetPlank]);
+  }, [frameLoop, stopStream]);
+
+  // Flip camera without resetting reps/plank timer
+  const flipCamera = useCallback(() => {
+    const next = facingModeRef.current === 'user' ? 'environment' : 'user';
+    facingModeRef.current = next;
+    setFacingMode(next);
+    startCamera(next);
+  }, [startCamera]);
 
   useEffect(() => {
-    startCamera();
-    return stopCamera;
+    completedRef.current = false;
+    resetReps();
+    resetPlank();
+    startCamera('user');
+    return stopStream;
   }, []);
 
   const progress = isReps
@@ -196,6 +219,13 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
       <div className="camera-viewport">
         <video ref={videoRef} playsInline muted style={{ display: 'none' }} />
         <canvas ref={canvasRef} className="camera-canvas" />
+
+        {/* Flip camera button — always visible when camera is running */}
+        {(status === 'running' || status === 'countdown') && (
+          <button className="flip-cam-btn" onClick={flipCamera} title="Flip camera">
+            <RefreshCw size={20} />
+          </button>
+        )}
 
         {status === 'loading' && (
           <div className="cam-overlay">
@@ -227,10 +257,10 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
               error?.toLowerCase().includes('permission') ||
               error?.toLowerCase().includes('notallowed')) && (
               <small style={{ marginTop: 8, color: '#f59e0b' }}>
-                On iPhone, camera requires HTTPS. See setup notes below.
+                On iPhone, camera requires HTTPS.
               </small>
             )}
-            <button className="btn-ghost" style={{ marginTop: 16 }} onClick={startCamera}>
+            <button className="btn-ghost" style={{ marginTop: 16 }} onClick={() => startCamera()}>
               Retry
             </button>
           </div>
