@@ -1,38 +1,9 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { PoseLandmarker, FilesetResolver, DrawingUtils } from '@mediapipe/tasks-vision';
+import { PoseLandmarker, DrawingUtils } from '@mediapipe/tasks-vision';
 import { RefreshCw, Mic, MicOff, MessageCircle, Play, X, Video } from 'lucide-react';
 import { useRepCounter, usePlankTimer } from '../hooks/useRepCounter';
 import { useVoiceCoach } from '../hooks/useVoiceCoach';
-
-// Singleton — only load once
-let landmarker = null;
-let landmarkerLoading = false;
-
-async function getPoseLandmarker() {
-  if (landmarker) return landmarker;
-  if (landmarkerLoading) {
-    while (landmarkerLoading) await new Promise((r) => setTimeout(r, 100));
-    return landmarker;
-  }
-  landmarkerLoading = true;
-  try {
-    const vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
-    );
-    landmarker = await PoseLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
-        delegate: 'GPU',
-      },
-      runningMode: 'VIDEO',
-      numPoses: 1,
-    });
-  } finally {
-    landmarkerLoading = false;
-  }
-  return landmarker;
-}
+import { getPoseLandmarker } from '../utils/poseLandmarker';
 
 const EXERCISE_VIDEOS = {
   PUSH_UP: 'https://www.youtube.com/embed/IODxDxX7oi4',
@@ -49,6 +20,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
   const lastTimeRef = useRef(-1);
   const completedRef = useRef(false);
 
+  const landmarkerRef = useRef(null);
   const exerciseRef = useRef(exercise);
   const processRepAngleRef = useRef(null);
   const processPlankAngleRef = useRef(null);
@@ -124,7 +96,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const lm = landmarker;
+    const lm = landmarkerRef.current;
 
     if (!video || !canvas || !lm || video.readyState < 2) {
       rafRef.current = requestAnimationFrame(frameLoop);
@@ -206,7 +178,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     setStatus('loading');
 
     try {
-      await getPoseLandmarker();
+      landmarkerRef.current = await getPoseLandmarker();
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: facing, width: { ideal: 640 }, height: { ideal: 480 } },
       });

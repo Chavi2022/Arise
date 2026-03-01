@@ -36,13 +36,19 @@ function unlockAudio() {
 }
 
 // ─── ElevenLabs TTS ───────────────────────────────────────────────
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
+
 async function speakElevenLabs(text) {
   const apiKey = getElevenKey();
   if (!apiKey) return false;
 
-  const res = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE}`,
-    {
+  const res = await withTimeout(
+    fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE}`, {
       method: 'POST',
       headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -55,7 +61,8 @@ async function speakElevenLabs(text) {
           use_speaker_boost: false,
         },
       }),
-    }
+    }),
+    4000
   );
   if (!res.ok) throw new Error(`ElevenLabs ${res.status}`);
 
@@ -213,7 +220,9 @@ export function useVoiceCoach() {
     setTimeout(async () => {
       if (mutedRef.current) return;
       busyRef.current = true;
-      try { await speak("Let's go!"); } catch { /* ok */ }
+      try {
+        await withTimeout(speak("Let's go!"), 3000);
+      } catch { /* skip if too slow */ }
       busyRef.current = false;
     }, 300);
   }, []);
