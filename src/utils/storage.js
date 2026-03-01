@@ -10,12 +10,12 @@ const KEYS = {
 };
 
 export const DEFAULT_APPS = [
-  { id: 'instagram', name: 'Instagram', emoji: '📸', limitMin: 30, enabled: true },
-  { id: 'tiktok', name: 'TikTok', emoji: '🎵', limitMin: 30, enabled: true },
-  { id: 'youtube', name: 'YouTube', emoji: '▶️', limitMin: 60, enabled: true },
-  { id: 'twitter', name: 'Twitter / X', emoji: '🐦', limitMin: 20, enabled: false },
-  { id: 'reddit', name: 'Reddit', emoji: '🤖', limitMin: 20, enabled: false },
-  { id: 'snapchat', name: 'Snapchat', emoji: '👻', limitMin: 20, enabled: false },
+  { id: 'instagram', name: 'Instagram', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Instagram_logo_2022.svg/600px-Instagram_logo_2022.svg.png', limitMin: 30, enabled: true },
+  { id: 'tiktok', name: 'TikTok', icon: 'https://sf-tb-sg.ibytedtos.com/obj/eden-sg/uhtyvueh7nulogpoguhm/tiktok-icon2.png', limitMin: 30, enabled: true },
+  { id: 'youtube', name: 'YouTube', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/600px-YouTube_full-color_icon_%282017%29.svg.png', limitMin: 60, enabled: true },
+  { id: 'twitter', name: 'X', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/X_logo_2023_%28white%29.png/600px-X_logo_2023_%28white%29.png', limitMin: 20, enabled: false },
+  { id: 'reddit', name: 'Reddit', icon: 'https://www.redditstatic.com/shreddit/assets/favicon/192x192.png', limitMin: 20, enabled: false },
+  { id: 'snapchat', name: 'Snapchat', icon: 'https://upload.wikimedia.org/wikipedia/en/thumb/c/c4/Snapchat_logo.svg/480px-Snapchat_logo.svg.png', limitMin: 20, enabled: false },
 ];
 
 export const DEFAULT_SETTINGS = {
@@ -29,10 +29,14 @@ function todayKey() {
 }
 
 // ---------- apps ----------
+const ICON_MAP = Object.fromEntries(DEFAULT_APPS.map(a => [a.id, a.icon]));
+
 export function getApps() {
   try {
     const raw = localStorage.getItem(KEYS.APPS);
-    return raw ? JSON.parse(raw) : DEFAULT_APPS;
+    if (!raw) return DEFAULT_APPS;
+    const apps = JSON.parse(raw);
+    return apps.map(a => ({ ...a, icon: ICON_MAP[a.id] ?? a.icon }));
   } catch {
     return DEFAULT_APPS;
   }
@@ -317,5 +321,8 @@ function seedWeightHistory() {
 /** Simulate all enabled apps being over their limit */
 export function simulateOverLimit() {
   const apps = getApps();
-  apps.filter((a) => a.enabled).forEach((a) => setUsage(a.id, a.limitMin + 10));
+  apps.filter((a) => a.enabled).forEach((a) => {
+    setUsage(a.id, a.limitMin + 10);
+    revokeUnlock(a.id);
+  });
 }

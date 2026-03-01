@@ -1,210 +1,9 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 
-const ELEVEN_VOICE = 'TxGEqnHWrfWFTfGW9XjX'; // Josh — young, energetic male
-const CUE_INTERVAL_MS = 4500;
+const ELEVEN_VOICE = 'pNInz6obpgDQGcFmaJgB'; // Adam — deep, natural male
 
-// ─── Smart cue generator (no API needed) ──────────────────────────
-function generateCue(frame, lastCue) {
-  const { exercise, angle, stage, reps, targetReps, seconds, targetSeconds } = frame;
-  const isPlank = exercise === 'PLANK';
-  const progress = isPlank
-    ? (seconds / (targetSeconds || 1))
-    : (reps / (targetReps || 1));
-  const remaining = isPlank ? (targetSeconds - seconds) : (targetReps - reps);
-
-  const pool = [];
-
-  // ── Completion ──
-  if (progress >= 1) {
-    pool.push(
-      "That's it, challenge crushed!",
-      "Done! You killed that!",
-      "All done, nice work!",
-    );
-    return pick(pool, lastCue);
-  }
-
-  // ── Last stretch (90%+) ──
-  if (progress > 0.9) {
-    pool.push(
-      "Almost there, finish strong!",
-      `Last ${remaining}, give me everything!`,
-      "Don't stop now, so close!",
-      "Dig deep, you're right there!",
-      "Come on, finish this!",
-    );
-    return pick(pool, lastCue);
-  }
-
-  // ── Milestone reps ──
-  if (!isPlank && reps > 0 && reps % 5 === 0 && progress < 0.9) {
-    pool.push(
-      `That's ${reps}, keep it rolling!`,
-      `${reps} done, looking strong!`,
-      `Nice, ${remaining} more to go!`,
-      "Halfway mark, don't slow down!",
-    );
-    return pick(pool, lastCue);
-  }
-
-  // ── Plank time milestones ──
-  if (isPlank && seconds > 0 && seconds % 15 === 0 && progress < 0.9) {
-    pool.push(
-      `${seconds} seconds, stay with me!`,
-      `${remaining} seconds left, hold it!`,
-      "You're doing great, keep holding!",
-      "Breathe through it, stay strong!",
-    );
-    return pick(pool, lastCue);
-  }
-
-  // ── Exercise-specific form cues ──
-  if (exercise === 'PUSH_UP') {
-    if (stage === 'down' || (angle !== null && angle < 70)) {
-      pool.push(
-        "There you go, perfect depth",
-        "Nice, now explode back up",
-        "Good, chest almost touching",
-        "That's deep enough, push up!",
-        "Beautiful form right there",
-      );
-    } else if (stage === 'up' || (angle !== null && angle > 140)) {
-      pool.push(
-        "Lock it out, good rep",
-        "Now back down, controlled",
-        "Solid lockout, keep going",
-        "Good, right back into it",
-        "Arms straight, nice",
-      );
-    } else {
-      pool.push(
-        "Get a little deeper for me",
-        "Keep that chest going down",
-        "Almost there, bend those arms",
-        "You're halfway down, finish it",
-        "Push through the full range",
-      );
-    }
-  }
-
-  else if (exercise === 'SQUAT') {
-    if (stage === 'down' || (angle !== null && angle < 80)) {
-      pool.push(
-        "Yeah, that's a real squat",
-        "Nice depth, now drive up",
-        "Sit into it, perfect",
-        "Good, now stand it up!",
-        "That's the depth I want",
-      );
-    } else if (stage === 'up' || (angle !== null && angle > 150)) {
-      pool.push(
-        "Drive through those heels!",
-        "Stand tall, squeeze at the top",
-        "Good rep, back down again",
-        "Chest up, looking great",
-        "Power through, let's go!",
-      );
-    } else {
-      pool.push(
-        "Sit back a little more",
-        "Get those hips lower",
-        "Break parallel for me",
-        "A little deeper, you got it",
-        "Keep sitting back",
-      );
-    }
-  }
-
-  else if (exercise === 'SIT_UP') {
-    if (stage === 'down' || (angle !== null && angle < 90)) {
-      pool.push(
-        "All the way up, let's go!",
-        "Touch your knees, come on",
-        "Squeeze those abs at the top",
-        "Good crunch, nice form",
-        "That's a full sit up!",
-      );
-    } else if (stage === 'up' || (angle !== null && angle > 145)) {
-      pool.push(
-        "Control it back down",
-        "Nice and smooth going back",
-        "Good, right into the next one",
-        "Don't rest at the bottom",
-        "Keep the momentum going",
-      );
-    } else {
-      pool.push(
-        "Keep curling up, almost there",
-        "Engage that core, pull up",
-        "You're so close, finish it",
-        "Don't give up on this rep",
-        "Drive it all the way up",
-      );
-    }
-  }
-
-  else if (exercise === 'PLANK') {
-    if (angle !== null && angle >= 160 && angle <= 200) {
-      pool.push(
-        "Body's looking solid, hold it",
-        "Perfect plank, stay right there",
-        "Core's engaged, breathe through it",
-        "You're locked in, don't move",
-        "That's what I wanna see",
-        "Stay tight, you got this",
-      );
-    } else if (angle !== null && angle < 160) {
-      pool.push(
-        "Bring those hips up a bit",
-        "Don't let your hips sag",
-        "Tighten that core, lift up",
-        "Hips are dropping, fix it",
-        "Engage your abs, level out",
-      );
-    } else {
-      pool.push(
-        "Lower your hips a little",
-        "Flatten that back out",
-        "You're piking up, come down",
-        "Straight line from head to heels",
-      );
-    }
-  }
-
-  // ── Sprinkle in general motivation ──
-  if (Math.random() < 0.25 && progress > 0.1 && progress < 0.85) {
-    pool.push(
-      "You got this, stay focused!",
-      "Keep that energy up!",
-      "Looking strong right now!",
-      "I see you putting in work!",
-      "That's the effort I like!",
-      "No slowing down!",
-    );
-  }
-
-  return pick(pool, lastCue);
-}
-
-function pick(pool, lastCue) {
-  const filtered = pool.filter(c => c !== lastCue);
-  const arr = filtered.length ? filtered : pool;
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-// ─── Gemini (bonus — used when available) ─────────────────────────
+// ─── Gemini (for conversational replies) ─────────────────────────
 const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
-
-const SYSTEM_PROMPT = `You're a personal trainer coaching someone through an exercise in real time. Talk like a real coach at the gym — casual, encouraging, natural. Use contractions and energy.
-
-Data per frame: exercise, angle (degrees), stage ("up"/"down"/null), reps, targetReps, seconds, targetSeconds.
-
-Rules:
-1. Respond with ONLY the spoken cue — 5 to 12 words
-2. Sound human. Examples: "There you go, that's a real squat", "Come on three more, you got this", "Don't quit on me now, finish strong"
-3. React to the angle: if they're deep enough, hype them. If not deep enough, coach them lower.
-4. Near the end get intense: "Last one, everything you got!", "Ten seconds, don't you dare stop!"
-5. NO quotes, NO emojis, NO formatting — just raw words as spoken`;
 
 function getGeminiKey() {
   const env = import.meta.env.VITE_GEMINI_KEY ?? '';
@@ -219,36 +18,20 @@ function getElevenKey() {
 }
 
 function isEnabled() {
-  if (import.meta.env.VITE_GEMINI_KEY || import.meta.env.VITE_ELEVEN_KEY) return true;
-  try { return localStorage.getItem('arise_coach_enabled') === 'true'; } catch { return false; }
+  try {
+    if (localStorage.getItem('arise_coach_enabled') === 'false') return false;
+  } catch { /* ok */ }
+  return true;
 }
 
-async function askGemini(apiKey, frameData, lastCue) {
-  const prompt = `${JSON.stringify(frameData)}\nLast cue: "${lastCue}"`;
-
-  for (const model of GEMINI_MODELS) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 40, temperature: 0.9 },
-          }),
-        }
-      );
-      if (res.status === 429) continue;
-      if (!res.ok) continue;
-      const data = await res.json();
-      const text = (data.candidates?.[0]?.content?.parts?.[0]?.text ?? '')
-        .trim().replace(/^["']|["']$/g, '').replace(/\n/g, ' ');
-      if (text && text.length > 2) return text;
-    } catch { /* try next model */ }
-  }
-  return null;
+function unlockAudio() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const buf = ctx.createBuffer(1, 1, 22050);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start(0);
+  setTimeout(() => ctx.close(), 100);
 }
 
 // ─── ElevenLabs TTS ───────────────────────────────────────────────
@@ -265,10 +48,10 @@ async function speakElevenLabs(text) {
         text,
         model_id: 'eleven_multilingual_v2',
         voice_settings: {
-          stability: 0.3,
-          similarity_boost: 0.85,
-          style: 0.7,
-          use_speaker_boost: true,
+          stability: 0.45,
+          similarity_boost: 0.9,
+          style: 0.5,
+          use_speaker_boost: false,
         },
       }),
     }
@@ -291,17 +74,27 @@ function speakBrowser(text) {
   return new Promise((resolve) => {
     if (!window.speechSynthesis) { resolve(); return; }
     window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.rate = 1.1;
-    utt.pitch = 1.0;
-    utt.volume = 1;
-    const voices = window.speechSynthesis.getVoices();
-    const v = voices.find(v => v.lang.startsWith('en')) || voices[0];
-    if (v) utt.voice = v;
-    utt.onend = resolve;
-    utt.onerror = resolve;
-    window.speechSynthesis.speak(utt);
-    setTimeout(resolve, 5000);
+
+    const trySpeak = () => {
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.rate = 1.1;
+      utt.pitch = 1.0;
+      utt.volume = 1;
+      const voices = window.speechSynthesis.getVoices();
+      const enVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+      if (enVoice) utt.voice = enVoice;
+      utt.onend = resolve;
+      utt.onerror = resolve;
+      window.speechSynthesis.speak(utt);
+      setTimeout(resolve, 5000);
+    };
+
+    if (window.speechSynthesis.getVoices().length > 0) {
+      trySpeak();
+    } else {
+      window.speechSynthesis.onvoiceschanged = trySpeak;
+      setTimeout(resolve, 3000);
+    }
   });
 }
 
@@ -369,7 +162,12 @@ function listen() {
     rec.onerror = (e) => reject(new Error(e.error));
     rec.onnomatch = () => resolve('');
     rec.onend = () => {}; // handled by onresult/onerror
-    setTimeout(() => { try { rec.stop(); } catch {} resolve(''); }, 8000);
+    setTimeout(() => { 
+      try { 
+        rec.stop(); 
+      } catch { /* timeout */ } 
+      resolve(''); 
+    }, 8000);
     rec.start();
   });
 }
@@ -378,60 +176,92 @@ function listen() {
 export function useVoiceCoach() {
   const enabledRef  = useRef(false);
   const busyRef     = useRef(false);
-  const lastCueRef  = useRef('');
   const latestRef   = useRef(null);
-  const timerRef    = useRef(null);
   const mountedRef  = useRef(true);
   const pausedRef   = useRef(false);
+  const mutedRef    = useRef(false);
+  const lastRepRef  = useRef(0);
+  const lastSecAnnounceRef = useRef(0);
 
   const [listening, setListening] = useState(false);
   const [lastReply, setLastReply] = useState('');
+  const [muted, _setMuted] = useState(false);
+
+  const setMuted = useCallback((val) => {
+    const next = typeof val === 'function' ? val(mutedRef.current) : val;
+    mutedRef.current = next;
+    _setMuted(next);
+    if (next) { window.speechSynthesis?.cancel(); }
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
     enabledRef.current = isEnabled();
-    return () => {
-      mountedRef.current = false;
-      clearInterval(timerRef.current);
-      window.speechSynthesis?.cancel();
-    };
+    return () => { mountedRef.current = false; window.speechSynthesis?.cancel(); };
   }, []);
 
-  const processCue = useCallback(async () => {
-    if (!enabledRef.current || busyRef.current || !latestRef.current || pausedRef.current) return;
-
-    busyRef.current = true;
-    try {
-      let cue = null;
-      const geminiKey = getGeminiKey();
-      if (geminiKey) {
-        try { cue = await askGemini(geminiKey, latestRef.current, lastCueRef.current); }
-        catch { /* fall through */ }
-      }
-      if (!cue) cue = generateCue(latestRef.current, lastCueRef.current);
-      if (!cue || !mountedRef.current) return;
-
-      lastCueRef.current = cue;
-      await speak(cue);
-    } catch (err) {
-      console.warn('[VoiceCoach]', err.message);
-    } finally {
+  const activate = useCallback(() => {
+    enabledRef.current = true;
+    lastRepRef.current = 0;
+    lastSecAnnounceRef.current = 0;
+    busyRef.current = false;
+    try { unlockAudio(); } catch { /* ok */ }
+    setTimeout(async () => {
+      if (mutedRef.current) return;
+      busyRef.current = true;
+      try { await speak("Let's go!"); } catch { /* ok */ }
       busyRef.current = false;
-    }
+    }, 300);
   }, []);
 
-  useEffect(() => {
-    timerRef.current = setInterval(processCue, CUE_INTERVAL_MS);
-    return () => clearInterval(timerRef.current);
-  }, [processCue]);
+  const speakCue = useCallback(async (text) => {
+    if (!text || mutedRef.current || pausedRef.current || !mountedRef.current) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
+    const timeout = setTimeout(() => { busyRef.current = false; }, 6000);
+    try { await speak(text); } catch (err) { console.warn('[VoiceCoach]', err.message); }
+    clearTimeout(timeout);
+    busyRef.current = false;
+  }, []);
 
   const feedFrame = useCallback((frameData) => {
     latestRef.current = frameData;
-  }, []);
+    if (!enabledRef.current || mutedRef.current || pausedRef.current) return;
 
-  /** User taps mic → listen → send to Gemini → speak reply */
+    const isPlank = frameData.exercise === 'PLANK';
+
+    // Rep-based: announce the number when it changes
+    if (!isPlank && frameData.reps > lastRepRef.current) {
+      lastRepRef.current = frameData.reps;
+      const remaining = frameData.targetReps - frameData.reps;
+      let text = `${frameData.reps}`;
+      if (remaining === 0) text = 'Done!';
+      else if (remaining === 1) text = `${frameData.reps}! Last one!`;
+      else if (remaining <= 3) text = `${frameData.reps}! ${remaining} more!`;
+      speakCue(text);
+    }
+
+    // Plank: every 15 seconds
+    if (isPlank) {
+      const sec = frameData.seconds;
+      const target = frameData.targetSeconds;
+      const remaining = target - sec;
+      if (sec >= target && lastSecAnnounceRef.current < target) {
+        lastSecAnnounceRef.current = sec;
+        speakCue('Done!');
+      } else if (remaining <= 5 && remaining > 0 && sec > lastSecAnnounceRef.current) {
+        lastSecAnnounceRef.current = sec;
+        speakCue(`${remaining}`);
+      } else if (sec > 0 && sec % 15 === 0 && sec > lastSecAnnounceRef.current) {
+        lastSecAnnounceRef.current = sec;
+        speakCue(`${sec} seconds`);
+      }
+    }
+  }, [speakCue]);
+
+  /** User taps mic → listen → send to Gemini → speak reply. Returns { transcript, reply } or null. */
   const talkToCoach = useCallback(async () => {
-    if (busyRef.current || listening) return;
+    if (busyRef.current || listening) return null;
 
     pausedRef.current = true;
     setListening(true);
@@ -442,7 +272,7 @@ export function useVoiceCoach() {
 
       if (!transcript || transcript.length < 2) {
         pausedRef.current = false;
-        return;
+        return null;
       }
 
       busyRef.current = true;
@@ -456,14 +286,16 @@ export function useVoiceCoach() {
 
       setLastReply(reply);
       await speak(reply);
+      return { transcript, reply };
     } catch (err) {
       console.warn('[VoiceCoach] Talk error:', err.message);
       setListening(false);
+      return null;
     } finally {
       busyRef.current = false;
       pausedRef.current = false;
     }
   }, [listening]);
 
-  return { feedFrame, talkToCoach, listening, lastReply };
+  return { feedFrame, talkToCoach, listening, lastReply, muted, setMuted, activate };
 }

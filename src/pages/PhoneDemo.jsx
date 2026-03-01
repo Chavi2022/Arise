@@ -11,21 +11,21 @@ const DEMO_APPS = [
   {
     id: 'instagram',
     name: 'Instagram',
-    emoji: '📸',
+    icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Instagram_logo_2022.svg/600px-Instagram_logo_2022.svg.png',
     color: 'linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)',
     limitSec: 30 * 60,
   },
   {
     id: 'tiktok',
     name: 'TikTok',
-    emoji: '🎵',
+    icon: 'https://sf-tb-sg.ibytedtos.com/obj/eden-sg/uhtyvueh7nulogpoguhm/tiktok-icon2.png',
     color: 'linear-gradient(135deg, #010101, #69C9D0)',
     limitSec: 30 * 60,
   },
   {
     id: 'youtube',
     name: 'YouTube',
-    emoji: '▶️',
+    icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/YouTube_full-color_icon_%282017%29.svg/600px-YouTube_full-color_icon_%282017%29.svg.png',
     color: 'linear-gradient(135deg, #FF0000, #cc0000)',
     limitSec: 60 * 60,
   },
@@ -179,7 +179,7 @@ function LockOverlay({ app, remaining, onChallenge, onDismiss }) {
     return (
       <div className="lock-overlay unlocked-state">
         <div className="lock-card">
-          <span style={{ fontSize: 56 }}>{app.emoji}</span>
+          <img src={app.icon} alt={app.name} style={{ width: 56, height: 56, borderRadius: 12 }} />
           <h2>{app.name} Unlocked</h2>
           <div className="lock-timer green">{fmt(remSec)}</div>
           <p className="lock-sub">remaining</p>
@@ -232,7 +232,7 @@ function HomeScreen({ onOpen, usageMap, unlockMap }) {
           return (
             <button key={app.id} className="demo-app-icon" onClick={() => onOpen(app)}>
               <div className="demo-app-bubble" style={{ background: app.color }}>
-                <span>{app.emoji}</span>
+                <img src={app.icon} alt={app.name} style={{ width: 32, height: 32, borderRadius: 8 }} />
                 {locked && <div className="demo-lock-badge">🔒</div>}
               </div>
               <span className="demo-app-name">{app.name}</span>

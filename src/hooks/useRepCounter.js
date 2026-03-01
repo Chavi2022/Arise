@@ -8,41 +8,55 @@ export function useRepCounter() {
 
   const stageRef = useRef(null);
   const repsRef = useRef(0);
+  const readyRef = useRef(false);
+  const stableFramesRef = useRef(0);
 
-  // Rep-based exercises (squat, push-up)
   const processRepAngle = useCallback((angle, exercise) => {
     if (angle === null || angle === undefined || !exercise) return;
     setCurrentAngle(Math.round(angle));
 
     const { upAngle, downAngle, upLabel, downLabel } = exercise;
 
+    // Require 5 stable frames in 'up' position before tracking
+    if (!readyRef.current) {
+      if (angle > upAngle) {
+        stableFramesRef.current += 1;
+        if (stableFramesRef.current >= 5) {
+          readyRef.current = true;
+          stageRef.current = 'up';
+          setStage('up');
+          setFeedback('Ready — go!');
+        } else {
+          setFeedback('Get in position!');
+        }
+      } else {
+        stableFramesRef.current = 0;
+        setFeedback('Get in position!');
+      }
+      return;
+    }
+
     if (angle > upAngle) {
       if (stageRef.current === 'down') {
         repsRef.current += 1;
         setReps(repsRef.current);
-        setFeedback('Rep complete! 🎉');
-      } else if (stageRef.current === 'up') {
+        setFeedback('Rep complete!');
+      } else if (stageRef.current !== 'up') {
         setFeedback(downLabel ?? 'Start moving');
-      } else {
-        // First detection — don't tell them to go lower yet, just acknowledge position
-        setFeedback('Ready — start your first rep!');
       }
       stageRef.current = 'up';
       setStage('up');
     } else if (angle < downAngle) {
+      if (stageRef.current !== 'down') {
+        setFeedback(upLabel ?? 'Come back up');
+      }
       stageRef.current = 'down';
       setStage('down');
-      setFeedback(upLabel ?? 'Come back up');
     } else {
-      // In between thresholds — guide them toward completing the movement
       if (stageRef.current === 'down') {
-        const pct = Math.round(((angle - downAngle) / (upAngle - downAngle)) * 100);
-        setFeedback(`Coming up… ${pct}%`);
+        setFeedback('Coming up…');
       } else if (stageRef.current === 'up') {
-        const pct = Math.round(((upAngle - angle) / (upAngle - downAngle)) * 100);
-        setFeedback(`Going down… ${pct}%`);
-      } else {
-        setFeedback('Get in position!');
+        setFeedback('Going down…');
       }
     }
   }, []);
@@ -54,6 +68,8 @@ export function useRepCounter() {
     setCurrentAngle(null);
     stageRef.current = null;
     repsRef.current = 0;
+    readyRef.current = false;
+    stableFramesRef.current = 0;
   }, []);
 
   return { reps, stage, feedback, currentAngle, processRepAngle, reset };

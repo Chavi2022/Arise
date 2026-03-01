@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, Unlock, Zap, Clock, TrendingUp } from 'lucide-react';
 import {
@@ -23,7 +23,7 @@ function AppCard({ app, usedMin, remaining, onUnlock }) {
   return (
     <div className={`app-card ${isLocked ? 'locked' : isUnlocked ? 'unlocked' : ''}`}>
       <div className="app-card-left">
-        <span className="app-emoji">{app.emoji}</span>
+        <img className="app-icon" src={app.icon} alt={app.name} />
         <div className="app-info">
           <span className="app-name">{app.name}</span>
           <div className="usage-bar-wrap">
@@ -60,28 +60,30 @@ function AppCard({ app, usedMin, remaining, onUnlock }) {
   );
 }
 
+function loadApps() { return getApps().filter((a) => a.enabled); }
+function loadUsage() { return getUsage(); }
+function loadRemaining() {
+  const rm = {};
+  getApps().forEach((a) => { rm[a.id] = getUnlockRemaining(a.id); });
+  return rm;
+}
+
 export default function Home() {
   const navigate = useNavigate();
-  const [apps, setApps] = useState([]);
-  const [usage, setUsage] = useState({});
-  const [remainingMap, setRemainingMap] = useState({});
-  const [tick, setTick] = useState(0);
-
-  const refresh = useCallback(() => {
-    setApps(getApps().filter((a) => a.enabled));
-    setUsage(getUsage());
-    const rm = {};
-    getApps().forEach((a) => { rm[a.id] = getUnlockRemaining(a.id); });
-    setRemainingMap(rm);
-  }, []);
+  const [apps, setApps] = useState(loadApps);
+  const [usage, setUsage] = useState(loadUsage);
+  const [remainingMap, setRemainingMap] = useState(loadRemaining);
+  const [simulated, setSimulated] = useState(false);
 
   useEffect(() => {
-    refresh();
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    const tick = () => {
+      setApps(loadApps());
+      setUsage(loadUsage());
+      setRemainingMap(loadRemaining());
+    };
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
-
-  useEffect(() => { refresh(); }, [tick]);
 
   const handleUnlock = (app) => {
     navigate('/challenge', { state: { app } });
@@ -89,7 +91,11 @@ export default function Home() {
 
   const handleSimulate = () => {
     simulateOverLimit();
-    refresh();
+    setApps([...loadApps()]);
+    setUsage({ ...loadUsage() });
+    setRemainingMap({ ...loadRemaining() });
+    setSimulated(true);
+    setTimeout(() => setSimulated(false), 2000);
   };
 
   const enabledApps = apps;
@@ -161,7 +167,7 @@ export default function Home() {
         </p>
         <button className="btn-secondary full-width" onClick={handleSimulate}>
           <Clock size={16} />
-          Simulate Over Limit
+          {simulated ? '✅ Apps locked — scroll up!' : 'Simulate Over Limit'}
         </button>
       </section>
     </div>

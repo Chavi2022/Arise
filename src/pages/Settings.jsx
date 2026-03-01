@@ -72,7 +72,7 @@ export default function Settings() {
                   />
                   <span className="toggle-track" />
                 </label>
-                <span className="app-emoji">{app.emoji}</span>
+                <img className="app-icon" src={app.icon} alt={app.name} />
                 <span className="app-name">{app.name}</span>
               </div>
               <div className="settings-row-right">

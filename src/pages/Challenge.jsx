@@ -18,11 +18,8 @@ export default function Challenge() {
   const app = location.state?.app ?? null;
 
   const settings = getSettings();
-  const [step, setStep] = useState(app ? STEPS.INTRO : STEPS.PICK);
-  const [chosenExercise, setChosenExercise] = useState(() => {
-    // Auto-pick a random exercise when coming from an app lock
-    return app ? pickRandom(EXERCISE_LIST) : null;
-  });
+  const [step, setStep] = useState(STEPS.PICK);
+  const [chosenExercise, setChosenExercise] = useState(null);
   const [unlockExpiry, setUnlockExpiry] = useState(null);
   const [countdown, setCountdown] = useState(settings.unlockMinutes * 60);
 
@@ -91,8 +88,17 @@ export default function Challenge() {
       {/* STEP: pick exercise */}
       {step === STEPS.PICK && (
         <div className="step-pick">
+          {app && (
+            <div className="locked-app-banner" style={{ marginBottom: 16 }}>
+              <img className="app-icon-large" src={app.icon} alt={app.name} />
+              <div>
+                <p className="locked-label">Locked</p>
+                <p className="locked-name">{app.name}</p>
+              </div>
+            </div>
+          )}
           <p className="section-desc" style={{ textAlign: 'center', marginBottom: 24 }}>
-            Choose an exercise to complete.
+            {app ? 'Pick an exercise to unlock it.' : 'Choose an exercise to complete.'}
           </p>
           <div className="exercise-grid">
             {EXERCISE_LIST.map((ex) => (
@@ -120,7 +126,7 @@ export default function Challenge() {
         <div className="step-intro">
           {app && (
             <div className="locked-app-banner">
-              <span className="app-emoji-large">{app.emoji}</span>
+              <img className="app-icon-large" src={app.icon} alt={app.name} />
               <div>
                 <p className="locked-label">Locked</p>
                 <p className="locked-name">{app.name}</p>
@@ -165,11 +171,9 @@ export default function Challenge() {
           <button className="btn-primary full-width" onClick={() => setStep(STEPS.CAMERA)}>
             Start Challenge
           </button>
-          {!app && (
-            <button className="btn-ghost full-width" style={{ marginTop: 8 }} onClick={() => setStep(STEPS.PICK)}>
-              Choose Different Exercise
-            </button>
-          )}
+          <button className="btn-ghost full-width" style={{ marginTop: 8 }} onClick={() => setStep(STEPS.PICK)}>
+            Choose Different Exercise
+          </button>
         </div>
       )}
 
@@ -207,7 +211,7 @@ export default function Challenge() {
 
           {app && (
             <div className="success-unlock-card">
-              <span className="app-emoji-large">{app.emoji}</span>
+              <img className="app-icon-large" src={app.icon} alt={app.name} />
               <div>
                 <p className="success-app-name">{app.name} is unlocked</p>
                 <p className="success-timer">{formatTime(countdown)} remaining</p>

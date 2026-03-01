@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { PoseLandmarker, FilesetResolver, DrawingUtils } from '@mediapipe/tasks-vision';
-import { RefreshCw, Mic, Play } from 'lucide-react';
+import { RefreshCw, Mic, MicOff, MessageCircle, Play, X, Video } from 'lucide-react';
 import { useRepCounter, usePlankTimer } from '../hooks/useRepCounter';
 import { useVoiceCoach } from '../hooks/useVoiceCoach';
 
@@ -34,6 +34,13 @@ async function getPoseLandmarker() {
   return landmarker;
 }
 
+const EXERCISE_VIDEOS = {
+  PUSH_UP: 'https://www.youtube.com/embed/IODxDxX7oi4',
+  SQUAT: 'https://www.youtube.com/embed/aclHkVaku9U',
+  PLANK: 'https://www.youtube.com/embed/ASdvN_XEl_c',
+  SIT_UP: 'https://www.youtube.com/embed/1fbU_MkV7NE',
+};
+
 export default function CameraChallenge({ exercise, targetReps, targetSeconds, onComplete }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -47,6 +54,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
   const processPlankAngleRef = useRef(null);
   const feedFrameRef = useRef(null);
   const repsRef = useRef(0);
+  const repFlashRef = useRef(false);
   const secondsRef = useRef(0);
   const stageRef = useRef(null);
   const facingModeRef = useRef('user');
@@ -55,20 +63,30 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
   const [error, setError] = useState(null);
   const [poseDetected, setPoseDetected] = useState(false);
   const [countdown, setCountdown] = useState(null);
-  const [facingMode, setFacingMode] = useState('user'); // 'user' = front, 'environment' = rear
+  const [facingMode, setFacingMode] = useState('user');
+  const [showVideo, setShowVideo] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const voiceRecRef = useRef(null);
+  const statusRef = useRef('loading');
 
   const isReps = exercise?.type === 'reps';
 
   const { reps, stage, feedback: repFeedback, currentAngle, processRepAngle, reset: resetReps } =
     useRepCounter();
   const { seconds, formFeedback, processPlankAngle, reset: resetPlank } = usePlankTimer();
-  const { feedFrame, talkToCoach, listening, lastReply } = useVoiceCoach();
+  const { feedFrame, talkToCoach, listening, lastReply, setMuted, muted, activate } = useVoiceCoach();
 
   useEffect(() => { exerciseRef.current = exercise; }, [exercise]);
   useEffect(() => { processRepAngleRef.current = processRepAngle; }, [processRepAngle]);
   useEffect(() => { processPlankAngleRef.current = processPlankAngle; }, [processPlankAngle]);
   useEffect(() => { feedFrameRef.current = feedFrame; }, [feedFrame]);
-  useEffect(() => { repsRef.current = reps; }, [reps]);
+  useEffect(() => {
+    repsRef.current = reps;
+    if (reps > 0) {
+      repFlashRef.current = true;
+      setTimeout(() => { repFlashRef.current = false; }, 600);
+    }
+  }, [reps]);
   useEffect(() => { secondsRef.current = seconds; }, [seconds]);
   useEffect(() => { stageRef.current = stage; }, [stage]);
   useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
@@ -138,20 +156,22 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
         const landmarks = results.landmarks[0];
 
         const drawingUtils = new DrawingUtils(ctx);
-        // Mirror landmark x-coordinates only for front camera
         const displayLandmarks = isFront
           ? landmarks.map((l) => ({ ...l, x: 1 - l.x }))
           : landmarks;
 
+        const skelColor = repFlashRef.current ? '#22c55e' : '#eab308';
+        const skelColorAlpha = repFlashRef.current ? '#22c55e90' : '#eab30880';
+
         drawingUtils.drawConnectors(displayLandmarks, PoseLandmarker.POSE_CONNECTIONS, {
-          color: '#a855f780',
-          lineWidth: 3,
+          color: skelColorAlpha,
+          lineWidth: 6,
         });
         drawingUtils.drawLandmarks(displayLandmarks, {
-          color: '#a855f7',
-          fillColor: '#ffffff20',
-          radius: 4,
-          lineWidth: 1,
+          color: skelColor,
+          fillColor: repFlashRef.current ? '#22c55e40' : '#eab30840',
+          radius: 7,
+          lineWidth: 2,
         });
 
         const ex = exerciseRef.current;
@@ -228,6 +248,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
   }, []);
 
   const startChallenge = useCallback(async () => {
+    activate();
     runningRef.current = false;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
 
@@ -240,7 +261,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     setStatus('running');
     runningRef.current = true;
     frameLoop();
-  }, [frameLoop]);
+  }, [frameLoop, activate]);
 
   const flipCamera = useCallback(() => {
     const next = facingModeRef.current === 'user' ? 'environment' : 'user';
@@ -256,6 +277,69 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     openCamera('user');
     return stopStream;
   }, []);
+
+  // Keep statusRef in sync
+  useEffect(() => { statusRef.current = status; }, [status]);
+
+  const startChallengeRef = useRef(startChallenge);
+  useEffect(() => { startChallengeRef.current = startChallenge; }, [startChallenge]);
+
+  const startVoiceListener = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    if (voiceRecRef.current) { try { voiceRecRef.current.abort(); } catch { /* ok */ } }
+
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.interimResults = true;
+    rec.continuous = false;
+
+    rec.onresult = (e) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const text = e.results[i][0].transcript.toLowerCase();
+        if (text.includes('start') || text.includes('go') || text.includes('begin')) {
+          try { rec.stop(); } catch { /* ok */ }
+          voiceRecRef.current = null;
+          setVoiceListening(false);
+          startChallengeRef.current();
+          return;
+        }
+      }
+    };
+    rec.onerror = () => {};
+    rec.onend = () => {
+      if (statusRef.current === 'preview') {
+        try { rec.start(); } catch { setVoiceListening(false); voiceRecRef.current = null; }
+      } else {
+        setVoiceListening(false);
+        voiceRecRef.current = null;
+      }
+    };
+
+    voiceRecRef.current = rec;
+    setVoiceListening(true);
+    try { rec.start(); } catch { setVoiceListening(false); voiceRecRef.current = null; }
+  }, []);
+
+  // Clean up voice listener when leaving preview
+  useEffect(() => {
+    if (status !== 'preview' && voiceRecRef.current) {
+      try { voiceRecRef.current.abort(); } catch { /* ok */ }
+      voiceRecRef.current = null;
+      setVoiceListening(false);
+    }
+  }, [status]);
+
+  // Wrap talkToCoach to detect video requests
+  const handleTalkToCoach = useCallback(async () => {
+    const result = await talkToCoach();
+    if (result?.transcript) {
+      const lower = result.transcript.toLowerCase();
+      if (lower.includes('video') || lower.includes('show me') || lower.includes('how to') || lower.includes('tutorial') || lower.includes('demonstrate')) {
+        setShowVideo(true);
+      }
+    }
+  }, [talkToCoach]);
 
   const progress = isReps
     ? Math.min((reps / (targetReps || 1)) * 100, 100)
@@ -279,22 +363,47 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
           </button>
         )}
         {status === 'running' && (
-          <button
-            className={`mic-btn ${listening ? 'mic-listening' : ''}`}
-            onClick={talkToCoach}
-            title="Talk to coach"
-          >
-            <Mic size={20} />
+          <>
+            <button
+              className={`mic-btn ${muted ? 'mic-muted' : ''}`}
+              onClick={() => setMuted(m => !m)}
+              title={muted ? 'Unmute coach' : 'Mute coach'}
+            >
+              {muted ? <MicOff size={18} /> : <Mic size={18} />}
+            </button>
+            {!muted && (
+              <button
+                className={`ask-btn ${listening ? 'mic-listening' : ''}`}
+                onClick={handleTalkToCoach}
+                title="Ask coach a question"
+              >
+                <MessageCircle size={18} />
+              </button>
+            )}
+          </>
+        )}
+
+        {/* Tutorial video button */}
+        {(status === 'preview' || status === 'running') && exercise?.id && EXERCISE_VIDEOS[exercise.id] && (
+          <button className="video-help-btn" onClick={() => setShowVideo(true)} title="Watch tutorial">
+            <Video size={18} />
           </button>
         )}
 
-        {/* Preview: position yourself, then tap Start */}
+        {/* Preview: position yourself, then tap or say Start */}
         {status === 'preview' && (
           <div className="cam-overlay preview-overlay">
             <p className="preview-text">Position yourself in frame</p>
             <button className="start-challenge-btn" onClick={startChallenge}>
               <Play size={22} fill="#fff" />
               <span>Start</span>
+            </button>
+            <button
+              className={`voice-start-hint ${voiceListening ? 'voice-active' : ''}`}
+              onClick={startVoiceListener}
+            >
+              <Mic size={14} />
+              <span>{voiceListening ? 'Listening… say "Start"' : 'Tap to use voice'}</span>
             </button>
           </div>
         )}
@@ -333,7 +442,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
         )}
         {status === 'running' && !poseDetected && (
           <div className="cam-overlay nudge-overlay">
-            <p>Step into frame 👆</p>
+            <p>Get fully in the frame</p>
           </div>
         )}
         {status === 'error' && (
@@ -350,6 +459,24 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
             <button className="btn-ghost" style={{ marginTop: 16 }} onClick={() => openCamera()}>
               Retry
             </button>
+          </div>
+        )}
+
+        {/* Video tutorial modal */}
+        {showVideo && exercise?.id && EXERCISE_VIDEOS[exercise.id] && (
+          <div className="video-modal-overlay" onClick={() => setShowVideo(false)}>
+            <div className="video-modal" onClick={(e) => e.stopPropagation()}>
+              <button className="video-close-btn" onClick={() => setShowVideo(false)}>
+                <X size={20} />
+              </button>
+              <iframe
+                src={EXERCISE_VIDEOS[exercise.id]}
+                title="Exercise tutorial"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="video-iframe"
+              />
+            </div>
           </div>
         )}
       </div>
