@@ -74,7 +74,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
   const { reps, stage, feedback: repFeedback, currentAngle, processRepAngle, reset: resetReps } =
     useRepCounter();
   const { seconds, formFeedback, processPlankAngle, reset: resetPlank } = usePlankTimer();
-  const { feedFrame, talkToCoach, listening, lastReply, setMuted, muted, activate } = useVoiceCoach();
+  const { feedFrame, talkToCoach, listening, lastReply, setMuted, muted, activate, formTip, startFormAnalysis, stopFormAnalysis } = useVoiceCoach();
 
   useEffect(() => { exerciseRef.current = exercise; }, [exercise]);
   useEffect(() => { processRepAngleRef.current = processRepAngle; }, [processRepAngle]);
@@ -96,19 +96,21 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     if (completedRef.current) return;
     if (isReps && reps >= (targetReps ?? 0) && reps > 0) {
       completedRef.current = true;
+      stopFormAnalysis();
       setStatus('done');
       setTimeout(() => onComplete?.(), 800);
     }
-  }, [reps, targetReps, isReps, onComplete]);
+  }, [reps, targetReps, isReps, onComplete, stopFormAnalysis]);
 
   useEffect(() => {
     if (completedRef.current) return;
     if (!isReps && seconds >= (targetSeconds ?? 0) && seconds > 0) {
       completedRef.current = true;
+      stopFormAnalysis();
       setStatus('done');
       setTimeout(() => onComplete?.(), 800);
     }
-  }, [seconds, targetSeconds, isReps, onComplete]);
+  }, [seconds, targetSeconds, isReps, onComplete, stopFormAnalysis]);
 
   const stopStream = useCallback(() => {
     runningRef.current = false;
@@ -261,7 +263,8 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     setStatus('running');
     runningRef.current = true;
     frameLoop();
-  }, [frameLoop, activate]);
+    startFormAnalysis();
+  }, [frameLoop, activate, startFormAnalysis]);
 
   const flipCamera = useCallback(() => {
     const next = facingModeRef.current === 'user' ? 'environment' : 'user';
@@ -412,6 +415,14 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
         {lastReply && status === 'running' && (
           <div className="coach-reply">
             <span>{lastReply}</span>
+          </div>
+        )}
+
+        {/* AI form tip */}
+        {formTip && status === 'running' && !lastReply && (
+          <div className="form-tip-bubble">
+            <span className="form-tip-icon">🤖</span>
+            <span>{formTip}</span>
           </div>
         )}
 
