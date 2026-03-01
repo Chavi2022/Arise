@@ -1,5 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 
+const MIN_DOWN_FRAMES = 3;
+const MIN_UP_FRAMES = 2;
+
 export function useRepCounter() {
   const [reps, setReps] = useState(0);
   const [stage, setStage] = useState(null);
@@ -10,14 +13,18 @@ export function useRepCounter() {
   const repsRef = useRef(0);
   const readyRef = useRef(false);
   const stableFramesRef = useRef(0);
+  const downFramesRef = useRef(0);
+  const upFramesRef = useRef(0);
+  const hitBottomRef = useRef(false);
+  const minAngleRef = useRef(999);
 
   const processRepAngle = useCallback((angle, exercise) => {
     if (angle === null || angle === undefined || !exercise) return;
     setCurrentAngle(Math.round(angle));
 
     const { upAngle, downAngle, upLabel, downLabel } = exercise;
+    const depthThreshold = downAngle + 15;
 
-    // Require 5 stable frames in 'up' position before tracking
     if (!readyRef.current) {
       if (angle > upAngle) {
         stableFramesRef.current += 1;
@@ -36,27 +43,45 @@ export function useRepCounter() {
       return;
     }
 
-    if (angle > upAngle) {
-      if (stageRef.current === 'down') {
-        repsRef.current += 1;
-        setReps(repsRef.current);
-        setFeedback('Rep complete!');
-      } else if (stageRef.current !== 'up') {
-        setFeedback(downLabel ?? 'Start moving');
+    if (angle < downAngle) {
+      downFramesRef.current += 1;
+      upFramesRef.current = 0;
+      if (angle < minAngleRef.current) minAngleRef.current = angle;
+      if (downFramesRef.current >= MIN_DOWN_FRAMES) {
+        hitBottomRef.current = true;
       }
-      stageRef.current = 'up';
-      setStage('up');
-    } else if (angle < downAngle) {
       if (stageRef.current !== 'down') {
         setFeedback(upLabel ?? 'Come back up');
       }
       stageRef.current = 'down';
       setStage('down');
+    } else if (angle > upAngle) {
+      upFramesRef.current += 1;
+      if (stageRef.current === 'down' && hitBottomRef.current && upFramesRef.current >= MIN_UP_FRAMES) {
+        if (minAngleRef.current <= depthThreshold) {
+          repsRef.current += 1;
+          setReps(repsRef.current);
+          setFeedback('Rep complete!');
+        } else {
+          setFeedback('Go deeper!');
+        }
+        hitBottomRef.current = false;
+        downFramesRef.current = 0;
+        minAngleRef.current = 999;
+      } else if (stageRef.current !== 'up' && stageRef.current !== 'down') {
+        setFeedback(downLabel ?? 'Start moving');
+      }
+      stageRef.current = 'up';
+      setStage('up');
     } else {
+      upFramesRef.current = 0;
       if (stageRef.current === 'down') {
         setFeedback('Coming up…');
       } else if (stageRef.current === 'up') {
         setFeedback('Going down…');
+        downFramesRef.current = 0;
+        hitBottomRef.current = false;
+        minAngleRef.current = 999;
       }
     }
   }, []);
@@ -70,6 +95,10 @@ export function useRepCounter() {
     repsRef.current = 0;
     readyRef.current = false;
     stableFramesRef.current = 0;
+    downFramesRef.current = 0;
+    upFramesRef.current = 0;
+    hitBottomRef.current = false;
+    minAngleRef.current = 999;
   }, []);
 
   return { reps, stage, feedback, currentAngle, processRepAngle, reset };

@@ -204,7 +204,10 @@ export function useVoiceCoach() {
     enabledRef.current = true;
     lastRepRef.current = 0;
     lastSecAnnounceRef.current = 0;
+    mutedRef.current = false;
+    _setMuted(false);
     busyRef.current = false;
+    window.speechSynthesis?.cancel();
     try { unlockAudio(); } catch { /* ok */ }
     setTimeout(async () => {
       if (mutedRef.current) return;

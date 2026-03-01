@@ -41,6 +41,25 @@ const EXERCISE_VIDEOS = {
   SIT_UP: 'https://www.youtube.com/embed/1fbU_MkV7NE',
 };
 
+function isFullBodyInFrame(landmarks) {
+  if (!Array.isArray(landmarks) || landmarks.length === 0) return false;
+  const margin = 0.03;
+  const visibilityThreshold = 0.45;
+  const requiredIdx = [0, 11, 12, 15, 16, 23, 24, 25, 26, 27, 28];
+
+  return requiredIdx.every((idx) => {
+    const p = landmarks[idx];
+    if (!p) return false;
+    if (typeof p.visibility === 'number' && p.visibility < visibilityThreshold) return false;
+    return (
+      p.x >= margin &&
+      p.x <= 1 - margin &&
+      p.y >= margin &&
+      p.y <= 1 - margin
+    );
+  });
+}
+
 export default function CameraChallenge({ exercise, targetReps, targetSeconds, onComplete }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -152,16 +171,24 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
       const results = lm.detectForVideo(video, performance.now());
 
       if (results.landmarks?.length > 0) {
-        setPoseDetected(true);
         const landmarks = results.landmarks[0];
+        const fullyInFrame = isFullBodyInFrame(landmarks);
+        setPoseDetected(fullyInFrame);
 
         const drawingUtils = new DrawingUtils(ctx);
         const displayLandmarks = isFront
           ? landmarks.map((l) => ({ ...l, x: 1 - l.x }))
           : landmarks;
 
-        const skelColor = repFlashRef.current ? '#22c55e' : '#eab308';
-        const skelColorAlpha = repFlashRef.current ? '#22c55e90' : '#eab30880';
+        const skelColor = !fullyInFrame ? '#ef4444'
+          : repFlashRef.current ? '#22c55e'
+          : '#eab308';
+        const skelColorAlpha = !fullyInFrame ? '#ef444480'
+          : repFlashRef.current ? '#22c55e90'
+          : '#eab30880';
+        const skelFill = !fullyInFrame ? '#ef444440'
+          : repFlashRef.current ? '#22c55e40'
+          : '#eab30840';
 
         drawingUtils.drawConnectors(displayLandmarks, PoseLandmarker.POSE_CONNECTIONS, {
           color: skelColorAlpha,
@@ -169,13 +196,13 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
         });
         drawingUtils.drawLandmarks(displayLandmarks, {
           color: skelColor,
-          fillColor: repFlashRef.current ? '#22c55e40' : '#eab30840',
+          fillColor: skelFill,
           radius: 7,
           lineWidth: 2,
         });
 
         const ex = exerciseRef.current;
-        if (ex) {
+        if (ex && fullyInFrame) {
           const angle = ex.getAngle(landmarks);
           if (ex.type === 'reps') processRepAngleRef.current?.(angle, ex);
           else processPlankAngleRef.current?.(angle, ex);
@@ -196,7 +223,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     }
 
     rafRef.current = requestAnimationFrame(frameLoop);
-  }, []);
+  }, [targetReps, targetSeconds]);
 
   const openCamera = useCallback(async (facing = facingModeRef.current) => {
     stopStream();
@@ -222,7 +249,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
       setError(err.message);
       setStatus('error');
     }
-  }, [stopStream]);
+  }, [stopStream, previewLoop]);
 
   const previewLoop = useCallback(() => {
     if (!runningRef.current) return;
@@ -276,7 +303,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     resetPlank();
     openCamera('user');
     return stopStream;
-  }, []);
+  }, [openCamera, resetPlank, resetReps, stopStream]);
 
   // Keep statusRef in sync
   useEffect(() => { statusRef.current = status; }, [status]);

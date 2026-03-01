@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Smartphone, Salad, BarChart2, Users, Settings } from 'lucide-react';
+import ariseLogo from '../assets/AriseS.png';
 
 const tabs = [
   { path: '/',         icon: LayoutDashboard, label: 'Home'     },
@@ -13,6 +14,8 @@ const tabs = [
 export default function Navbar() {
   return (
     <nav className="bottom-nav">
+      <img src={ariseLogo} alt="Arise logo" className="nav-logo" style={{ height: 32, width: 32, marginRight: 8 }} />
+      {/* eslint-disable-next-line no-unused-vars */}
       {tabs.map(({ path, icon: Icon, label }) => (
         <NavLink
           key={path}
