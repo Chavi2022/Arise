@@ -25,13 +25,23 @@ function isEnabled() {
 }
 
 function unlockAudio() {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const buf = ctx.createBuffer(1, 1, 22050);
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.connect(ctx.destination);
-  src.start(0);
-  setTimeout(() => ctx.close(), 100);
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    src.start(0);
+    setTimeout(() => ctx.close(), 100);
+  } catch { /* ok */ }
+
+  // Unlock speechSynthesis on mobile — must happen in user-gesture context
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+    const warmup = new SpeechSynthesisUtterance('');
+    warmup.volume = 0;
+    window.speechSynthesis.speak(warmup);
+  }
 }
 
 // ─── ElevenLabs TTS ───────────────────────────────────────────────
@@ -204,7 +214,21 @@ export function useVoiceCoach() {
   useEffect(() => {
     mountedRef.current = true;
     enabledRef.current = isEnabled();
-    return () => { mountedRef.current = false; window.speechSynthesis?.cancel(); };
+
+    // Mobile Chrome pauses speechSynthesis after ~15s of inactivity;
+    // this keepalive prevents that by poking it periodically.
+    const keepAlive = setInterval(() => {
+      if (window.speechSynthesis?.speaking) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      }
+    }, 10000);
+
+    return () => {
+      mountedRef.current = false;
+      clearInterval(keepAlive);
+      window.speechSynthesis?.cancel();
+    };
   }, []);
 
   const activate = useCallback(() => {
@@ -212,15 +236,21 @@ export function useVoiceCoach() {
     lastRepRef.current = 0;
     lastSecAnnounceRef.current = 0;
     busyRef.current = false;
-    try { unlockAudio(); } catch { /* ok */ }
-    setTimeout(async () => {
-      if (mutedRef.current) return;
-      busyRef.current = true;
-      try {
-        await withTimeout(speak("Let's go!"), 3000);
-      } catch { /* skip if too slow */ }
-      busyRef.current = false;
-    }, 300);
+    unlockAudio();
+
+    // Speak "Let's go!" synchronously via browser TTS first (keeps user-gesture chain)
+    // then try ElevenLabs in background for future calls
+    if (!mutedRef.current && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance("Let's go!");
+      utt.rate = 0.95;
+      utt.pitch = 1.0;
+      utt.volume = 1;
+      const voices = window.speechSynthesis.getVoices();
+      const enVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+      if (enVoice) utt.voice = enVoice;
+      window.speechSynthesis.speak(utt);
+    }
   }, []);
 
   const speakCue = useCallback(async (text) => {
@@ -236,15 +266,18 @@ export function useVoiceCoach() {
   // Quick count announcements that never get blocked by busyRef
   const speakCount = useCallback((text) => {
     if (!text || mutedRef.current || pausedRef.current || !mountedRef.current) return;
-    window.speechSynthesis?.cancel();
+    if (!window.speechSynthesis) return;
+    // Mobile Chrome workaround: resume if paused, then cancel pending
+    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+    window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(text);
     utt.rate = 0.95;
     utt.pitch = 1.0;
     utt.volume = 1;
-    const voices = window.speechSynthesis?.getVoices() ?? [];
+    const voices = window.speechSynthesis.getVoices();
     const enVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
     if (enVoice) utt.voice = enVoice;
-    window.speechSynthesis?.speak(utt);
+    window.speechSynthesis.speak(utt);
   }, []);
 
   const feedFrame = useCallback((frameData) => {
