@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { PoseLandmarker, FilesetResolver, DrawingUtils } from '@mediapipe/tasks-vision';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Mic, Play } from 'lucide-react';
 import { useRepCounter, usePlankTimer } from '../hooks/useRepCounter';
+import { useVoiceCoach } from '../hooks/useVoiceCoach';
 
 // Singleton — only load once
 let landmarker = null;
@@ -44,7 +45,10 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
   const exerciseRef = useRef(exercise);
   const processRepAngleRef = useRef(null);
   const processPlankAngleRef = useRef(null);
-  // Store the current facingMode in a ref so frameLoop always knows whether to mirror
+  const feedFrameRef = useRef(null);
+  const repsRef = useRef(0);
+  const secondsRef = useRef(0);
+  const stageRef = useRef(null);
   const facingModeRef = useRef('user');
 
   const [status, setStatus] = useState('loading');
@@ -55,13 +59,18 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
 
   const isReps = exercise?.type === 'reps';
 
-  const { reps, feedback: repFeedback, currentAngle, processRepAngle, reset: resetReps } =
+  const { reps, stage, feedback: repFeedback, currentAngle, processRepAngle, reset: resetReps } =
     useRepCounter();
   const { seconds, formFeedback, processPlankAngle, reset: resetPlank } = usePlankTimer();
+  const { feedFrame, talkToCoach, listening, lastReply } = useVoiceCoach();
 
   useEffect(() => { exerciseRef.current = exercise; }, [exercise]);
   useEffect(() => { processRepAngleRef.current = processRepAngle; }, [processRepAngle]);
   useEffect(() => { processPlankAngleRef.current = processPlankAngle; }, [processPlankAngle]);
+  useEffect(() => { feedFrameRef.current = feedFrame; }, [feedFrame]);
+  useEffect(() => { repsRef.current = reps; }, [reps]);
+  useEffect(() => { secondsRef.current = seconds; }, [seconds]);
+  useEffect(() => { stageRef.current = stage; }, [stage]);
   useEffect(() => { facingModeRef.current = facingMode; }, [facingMode]);
 
   // Completion detection
@@ -147,10 +156,19 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
 
         const ex = exerciseRef.current;
         if (ex) {
-          // Always use original (unmirrored) landmarks for angle calculation
           const angle = ex.getAngle(landmarks);
           if (ex.type === 'reps') processRepAngleRef.current?.(angle, ex);
           else processPlankAngleRef.current?.(angle, ex);
+
+          feedFrameRef.current?.({
+            exercise: ex.id,
+            angle: angle !== null ? Math.round(angle) : null,
+            stage: stageRef.current,
+            reps: repsRef.current,
+            targetReps: targetReps ?? 0,
+            seconds: secondsRef.current,
+            targetSeconds: targetSeconds ?? 0,
+          });
         }
       } else {
         setPoseDetected(false);
@@ -160,7 +178,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
     rafRef.current = requestAnimationFrame(frameLoop);
   }, []);
 
-  const startCamera = useCallback(async (facing = facingModeRef.current) => {
+  const openCamera = useCallback(async (facing = facingModeRef.current) => {
     stopStream();
     setError(null);
     setStatus('loading');
@@ -174,34 +192,68 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
       videoRef.current.srcObject = stream;
       await videoRef.current.play();
 
-      setStatus('countdown');
-      for (let i = 3; i >= 1; i--) {
-        setCountdown(i);
-        await new Promise((r) => setTimeout(r, 1000));
-      }
-      setCountdown(null);
-      setStatus('running');
+      // Show live preview — user decides when to start
+      setStatus('preview');
+
+      // Start drawing preview frames (no pose processing yet)
       runningRef.current = true;
-      frameLoop();
+      previewLoop();
     } catch (err) {
       setError(err.message);
       setStatus('error');
     }
-  }, [frameLoop, stopStream]);
+  }, [stopStream]);
 
-  // Flip camera without resetting reps/plank timer
+  const previewLoop = useCallback(() => {
+    if (!runningRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < 2) {
+      rafRef.current = requestAnimationFrame(previewLoop);
+      return;
+    }
+    const ctx = canvas.getContext('2d');
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 480;
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+
+    const isFront = facingModeRef.current === 'user';
+    ctx.save();
+    if (isFront) { ctx.scale(-1, 1); ctx.drawImage(video, -w, 0, w, h); }
+    else { ctx.drawImage(video, 0, 0, w, h); }
+    ctx.restore();
+
+    rafRef.current = requestAnimationFrame(previewLoop);
+  }, []);
+
+  const startChallenge = useCallback(async () => {
+    runningRef.current = false;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+
+    setStatus('countdown');
+    for (let i = 3; i >= 1; i--) {
+      setCountdown(i);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    setCountdown(null);
+    setStatus('running');
+    runningRef.current = true;
+    frameLoop();
+  }, [frameLoop]);
+
   const flipCamera = useCallback(() => {
     const next = facingModeRef.current === 'user' ? 'environment' : 'user';
     facingModeRef.current = next;
     setFacingMode(next);
-    startCamera(next);
-  }, [startCamera]);
+    openCamera(next);
+  }, [openCamera]);
 
   useEffect(() => {
     completedRef.current = false;
     resetReps();
     resetPlank();
-    startCamera('user');
+    openCamera('user');
     return stopStream;
   }, []);
 
@@ -220,11 +272,46 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
         <video ref={videoRef} playsInline muted style={{ display: 'none' }} />
         <canvas ref={canvasRef} className="camera-canvas" />
 
-        {/* Flip camera button — always visible when camera is running */}
-        {(status === 'running' || status === 'countdown') && (
+        {/* Camera controls */}
+        {(status === 'preview' || status === 'running' || status === 'countdown') && (
           <button className="flip-cam-btn" onClick={flipCamera} title="Flip camera">
             <RefreshCw size={20} />
           </button>
+        )}
+        {status === 'running' && (
+          <button
+            className={`mic-btn ${listening ? 'mic-listening' : ''}`}
+            onClick={talkToCoach}
+            title="Talk to coach"
+          >
+            <Mic size={20} />
+          </button>
+        )}
+
+        {/* Preview: position yourself, then tap Start */}
+        {status === 'preview' && (
+          <div className="cam-overlay preview-overlay">
+            <p className="preview-text">Position yourself in frame</p>
+            <button className="start-challenge-btn" onClick={startChallenge}>
+              <Play size={22} fill="#fff" />
+              <span>Start</span>
+            </button>
+          </div>
+        )}
+
+        {/* Coach reply bubble */}
+        {lastReply && status === 'running' && (
+          <div className="coach-reply">
+            <span>{lastReply}</span>
+          </div>
+        )}
+
+        {/* Listening indicator */}
+        {listening && (
+          <div className="cam-overlay" style={{ background: 'rgba(124,58,237,0.15)' }}>
+            <div className="listening-pulse" />
+            <p style={{ marginTop: 12 }}>Listening...</p>
+          </div>
         )}
 
         {status === 'loading' && (
@@ -260,7 +347,7 @@ export default function CameraChallenge({ exercise, targetReps, targetSeconds, o
                 On iPhone, camera requires HTTPS.
               </small>
             )}
-            <button className="btn-ghost" style={{ marginTop: 16 }} onClick={() => startCamera()}>
+            <button className="btn-ghost" style={{ marginTop: 16 }} onClick={() => openCamera()}>
               Retry
             </button>
           </div>

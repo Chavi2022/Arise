@@ -21,20 +21,29 @@ export function useRepCounter() {
         repsRef.current += 1;
         setReps(repsRef.current);
         setFeedback('Rep complete! 🎉');
-      } else {
+      } else if (stageRef.current === 'up') {
         setFeedback(downLabel ?? 'Start moving');
+      } else {
+        // First detection — don't tell them to go lower yet, just acknowledge position
+        setFeedback('Ready — start your first rep!');
       }
       stageRef.current = 'up';
       setStage('up');
     } else if (angle < downAngle) {
-      if (stageRef.current !== 'down') {
-        setFeedback(upLabel ?? 'Come back up');
-      }
       stageRef.current = 'down';
       setStage('down');
+      setFeedback(upLabel ?? 'Come back up');
     } else {
-      const pct = Math.round(((angle - downAngle) / (upAngle - downAngle)) * 100);
-      setFeedback(stageRef.current === 'down' ? `Coming up… ${pct}%` : `Going down… ${100 - pct}%`);
+      // In between thresholds — guide them toward completing the movement
+      if (stageRef.current === 'down') {
+        const pct = Math.round(((angle - downAngle) / (upAngle - downAngle)) * 100);
+        setFeedback(`Coming up… ${pct}%`);
+      } else if (stageRef.current === 'up') {
+        const pct = Math.round(((upAngle - angle) / (upAngle - downAngle)) * 100);
+        setFeedback(`Going down… ${pct}%`);
+      } else {
+        setFeedback('Get in position!');
+      }
     }
   }, []);
 
