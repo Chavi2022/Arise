@@ -6,6 +6,7 @@ import Settings from './pages/Settings';
 import PhoneDemo from './pages/PhoneDemo';
 import Progress from './pages/Progress';
 import Diet from './pages/Diet';
+import Social from './pages/Social';
 import './App.css';
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
             <Route path="/diet"      element={<Diet />} />
             <Route path="/progress"  element={<Progress />} />
             <Route path="/challenge" element={<Challenge />} />
+            <Route path="/social"    element={<Social />} />
             <Route path="/settings"  element={<Settings />} />
           </Routes>
         </main>

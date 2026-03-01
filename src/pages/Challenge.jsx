@@ -4,6 +4,7 @@ import { ChevronLeft, CheckCircle } from 'lucide-react';
 import CameraChallenge from '../components/CameraChallenge';
 import { EXERCISES, EXERCISE_LIST } from '../utils/exerciseConfig';
 import { getSettings, grantUnlock, logChallenge } from '../utils/storage';
+import { contributeToGoals } from '../utils/socialStorage';
 
 const STEPS = { PICK: 'pick', INTRO: 'intro', CAMERA: 'camera', SUCCESS: 'success' };
 
@@ -46,12 +47,19 @@ export default function Challenge() {
   }, [step, unlockExpiry]);
 
   const handleComplete = () => {
-    // Log activity
+    const reps = chosenExercise?.type === 'reps' ? (targetReps ?? 0) : 0;
+    const seconds = chosenExercise?.type === 'hold' ? (targetSeconds ?? 0) : 0;
+
     logChallenge({
-      reps: chosenExercise?.type === 'reps' ? (targetReps ?? 0) : 0,
-      seconds: chosenExercise?.type === 'hold' ? (targetSeconds ?? 0) : 0,
+      reps,
+      seconds,
       savedMin: app ? settings.unlockMinutes : 0,
     });
+
+    if (chosenExercise) {
+      const amount = chosenExercise.type === 'reps' ? reps : seconds;
+      contributeToGoals(chosenExercise.id, amount);
+    }
 
     let expiry = null;
     if (app) {

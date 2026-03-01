@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Smartphone, Salad, BarChart2, Settings } from 'lucide-react';
+import { LayoutDashboard, Smartphone, Salad, BarChart2, Users, Settings } from 'lucide-react';
 
 const tabs = [
   { path: '/',         icon: LayoutDashboard, label: 'Home'     },
   { path: '/demo',     icon: Smartphone,      label: 'Demo'     },
   { path: '/diet',     icon: Salad,           label: 'Nutrition'},
   { path: '/progress', icon: BarChart2,       label: 'Progress' },
+  { path: '/social',   icon: Users,           label: 'Social'   },
   { path: '/settings', icon: Settings,        label: 'Settings' },
 ];
 
