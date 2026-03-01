@@ -7,7 +7,7 @@ export const EXERCISES = {
     emoji: '🏋️',
     muscleGroup: 'Chest · Triceps · Shoulders',
     type: 'reps',
-    defaultReps: 10,
+    defaultReps: 2,
     getAngle: (lm) =>
       avg(
         getAngle(lm, LANDMARKS.LEFT_SHOULDER, LANDMARKS.LEFT_ELBOW, LANDMARKS.LEFT_WRIST),
@@ -25,7 +25,7 @@ export const EXERCISES = {
     emoji: '🦵',
     muscleGroup: 'Quads · Glutes · Hamstrings',
     type: 'reps',
-    defaultReps: 20,
+    defaultReps: 2,
     getAngle: (lm) =>
       avg(
         getAngle(lm, LANDMARKS.LEFT_HIP, LANDMARKS.LEFT_KNEE, LANDMARKS.LEFT_ANKLE),
@@ -43,7 +43,7 @@ export const EXERCISES = {
     emoji: '🤸',
     muscleGroup: 'Abs · Hip Flexors',
     type: 'reps',
-    defaultReps: 15,
+    defaultReps: 2,
     // Shoulder → hip → knee angle: ~170° lying flat, ~80° sitting up
     getAngle: (lm) =>
       avg(
@@ -62,7 +62,7 @@ export const EXERCISES = {
     emoji: '🧘',
     muscleGroup: 'Core · Shoulders · Back',
     type: 'hold',
-    defaultSeconds: 60,
+    defaultSeconds: 2,
     // Shoulder → hip → ankle: straight body = ~175–195°
     getAngle: (lm) =>
       avg(

@@ -233,40 +233,55 @@ export function useVoiceCoach() {
     busyRef.current = false;
   }, []);
 
+  // Quick count announcements that never get blocked by busyRef
+  const speakCount = useCallback((text) => {
+    if (!text || mutedRef.current || pausedRef.current || !mountedRef.current) return;
+    window.speechSynthesis?.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate = 0.95;
+    utt.pitch = 1.0;
+    utt.volume = 1;
+    const voices = window.speechSynthesis?.getVoices() ?? [];
+    const enVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+    if (enVoice) utt.voice = enVoice;
+    window.speechSynthesis?.speak(utt);
+  }, []);
+
   const feedFrame = useCallback((frameData) => {
     latestRef.current = frameData;
     if (!enabledRef.current || mutedRef.current || pausedRef.current) return;
 
     const isPlank = frameData.exercise === 'PLANK';
 
-    // Rep-based: announce the number when it changes
     if (!isPlank && frameData.reps > lastRepRef.current) {
       lastRepRef.current = frameData.reps;
       const remaining = frameData.targetReps - frameData.reps;
-      let text = `${frameData.reps}`;
-      if (remaining === 0) text = 'Done!';
-      else if (remaining === 1) text = `${frameData.reps}! Last one!`;
-      else if (remaining <= 3) text = `${frameData.reps}! ${remaining} more!`;
-      speakCue(text);
+      if (remaining === 0) {
+        speakCount(`${frameData.reps}!`);
+        setTimeout(() => speakCue('Done! Great work!'), 600);
+      } else if (remaining === 1) {
+        speakCount(`${frameData.reps}! Last one!`);
+      } else {
+        speakCount(`${frameData.reps}`);
+      }
     }
 
-    // Plank: every 15 seconds
     if (isPlank) {
       const sec = frameData.seconds;
       const target = frameData.targetSeconds;
       const remaining = target - sec;
       if (sec >= target && lastSecAnnounceRef.current < target) {
         lastSecAnnounceRef.current = sec;
-        speakCue('Done!');
+        speakCount('Done! Great work!');
       } else if (remaining <= 5 && remaining > 0 && sec > lastSecAnnounceRef.current) {
         lastSecAnnounceRef.current = sec;
-        speakCue(`${remaining}`);
+        speakCount(`${remaining}`);
       } else if (sec > 0 && sec % 15 === 0 && sec > lastSecAnnounceRef.current) {
         lastSecAnnounceRef.current = sec;
         speakCue(`${sec} seconds`);
       }
     }
-  }, [speakCue]);
+  }, [speakCue, speakCount]);
 
   /** User taps mic → listen → send to Gemini → speak reply. Returns { transcript, reply } or null. */
   const talkToCoach = useCallback(async () => {
