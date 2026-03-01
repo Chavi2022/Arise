@@ -1,10 +1,11 @@
-import { useState, useCallback, useMemo } from 'react';
-import { Search, Plus, Trash2, X, Share2, ChevronDown, ChevronUp, Scale, TrendingDown, TrendingUp, Minus } from 'lucide-react';
+import { useState, useCallback, useMemo, useRef } from 'react';
+import { Search, Plus, Trash2, X, Share2, ChevronDown, ChevronUp, Scale, TrendingDown, TrendingUp, Minus, Camera, Sparkles, Send, ImagePlus } from 'lucide-react';
 import {
   getDietLog, addFoodToMeal, removeFoodFromMeal,
   getDietGoals, logWeight, getWeightHistory, saveDietGoals,
 } from '../utils/storage';
 import { searchFood, QUICK_FOODS, macrosFor, sumMacros } from '../utils/nutritionApi';
+import { analyzeMealImage, analyzeMealText } from '../utils/geminiApi';
 
 // ─── Constants ────────────────────────────────────────────────────
 const MEALS = [
@@ -180,6 +181,181 @@ function FoodSearch({ onAdd, onClose }) {
                 </button>
               );
             })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Meal Scanner (Gemini AI) ─────────────────────────────────────
+function MealScanner({ onAddFoods, onClose }) {
+  const [mode, setMode]           = useState('idle'); // idle | loading | results | error
+  const [preview, setPreview]     = useState(null);
+  const [textInput, setTextInput] = useState('');
+  const [results, setResults]     = useState([]);
+  const [error, setError]         = useState('');
+  const fileRef                   = useRef(null);
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPreview(URL.createObjectURL(file));
+    setMode('loading');
+    setError('');
+    try {
+      const foods = await analyzeMealImage(file);
+      setResults(foods);
+      setMode('results');
+    } catch (err) {
+      setError(err.message || 'Failed to analyze image');
+      setMode('error');
+    }
+  };
+
+  const handleTextSubmit = async () => {
+    if (!textInput.trim()) return;
+    setMode('loading');
+    setError('');
+    setPreview(null);
+    try {
+      const foods = await analyzeMealText(textInput.trim());
+      setResults(foods);
+      setMode('results');
+    } catch (err) {
+      setError(err.message || 'Failed to analyze meal');
+      setMode('error');
+    }
+  };
+
+  const handleAddAll = () => {
+    onAddFoods(results);
+    onClose();
+  };
+
+  const handleAddItem = (food) => {
+    onAddFoods([food]);
+  };
+
+  const reset = () => {
+    setMode('idle');
+    setPreview(null);
+    setResults([]);
+    setError('');
+    setTextInput('');
+  };
+
+  return (
+    <div className="food-search-drawer">
+      <div className="food-search-header">
+        <span className="food-search-title">
+          <Sparkles size={16} style={{ display: 'inline', verticalAlign: -2, marginRight: 6, color: 'var(--purple-light)' }} />
+          AI Meal Scanner
+        </span>
+        <button className="btn-back" onClick={onClose} style={{ width: 32, height: 32 }}><X size={16} /></button>
+      </div>
+
+      <div className="food-search-scroll">
+        {/* Idle / input state */}
+        {(mode === 'idle' || mode === 'error') && (
+          <>
+            {/* Photo option */}
+            <div className="scanner-option-card" onClick={() => fileRef.current?.click()}>
+              <div className="scanner-option-icon" style={{ background: 'var(--purple-dim)' }}>
+                <Camera size={22} color="var(--purple-light)" />
+              </div>
+              <div className="scanner-option-text">
+                <span className="scanner-option-title">Take or Upload Photo</span>
+                <span className="scanner-option-desc">Snap your plate and AI identifies the food</span>
+              </div>
+              <ImagePlus size={18} color="var(--muted)" />
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleFile}
+              style={{ display: 'none' }}
+            />
+
+            {/* Divider */}
+            <div className="scanner-divider">
+              <span>or</span>
+            </div>
+
+            {/* Text option */}
+            <div className="scanner-text-card">
+              <p className="scanner-text-label">Describe your meal</p>
+              <div className="scanner-text-row">
+                <input
+                  className="scanner-text-input"
+                  placeholder='e.g. "Grilled chicken with rice and broccoli"'
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleTextSubmit()}
+                />
+                <button
+                  className="scanner-send-btn"
+                  onClick={handleTextSubmit}
+                  disabled={!textInput.trim()}
+                >
+                  <Send size={16} />
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="scanner-error">
+                <p>{error}</p>
+                <button className="meal-add-btn" style={{ justifyContent: 'center' }} onClick={reset}>Try again</button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Loading state */}
+        {mode === 'loading' && (
+          <div className="scanner-loading">
+            {preview && <img src={preview} alt="Meal" className="scanner-preview-img" />}
+            <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3, margin: '20px auto' }} />
+            <p className="scanner-loading-text">Analyzing your meal with AI...</p>
+          </div>
+        )}
+
+        {/* Results state */}
+        {mode === 'results' && (
+          <div className="scanner-results">
+            {preview && <img src={preview} alt="Meal" className="scanner-preview-img" />}
+            <p className="scanner-results-title">
+              Found {results.length} item{results.length !== 1 ? 's' : ''}
+            </p>
+            <div className="food-results">
+              {results.map((food) => {
+                const m = macrosFor(food);
+                return (
+                  <div key={food.id} className="scanner-result-item">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="food-result-name">{food.name}</div>
+                      <div className="food-result-brand">{food.servings}× {food.servingSize}</div>
+                    </div>
+                    <div className="scanner-result-right">
+                      <span className="macro-pill purple">{m.calories} kcal</span>
+                      <button className="scanner-add-one" onClick={() => handleAddItem(food)}>
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button className="btn-primary full-width" style={{ padding: 12, fontSize: 14, marginTop: 14 }} onClick={handleAddAll}>
+              Add All to Meal
+            </button>
+            <button className="meal-add-btn" style={{ justifyContent: 'center', marginTop: 8 }} onClick={reset}>
+              ← Scan another meal
+            </button>
           </div>
         )}
       </div>
@@ -376,6 +552,7 @@ export default function Diet() {
     try { return parseFloat(localStorage.getItem('arise_weight_goal') || '') || null; } catch { return null; }
   });
   const [searchMeal, setSearch] = useState(null);
+  const [scannerMeal, setScannerMeal] = useState(null);
   const goals                   = getDietGoals();
 
   const refresh = () => setLog(getDietLog());
@@ -388,6 +565,11 @@ export default function Diet() {
     addFoodToMeal(mealId, food);
     refresh();
     setSearch(null);
+  };
+
+  const handleScannerAdd = (foods) => {
+    foods.forEach((food) => addFoodToMeal(scannerMeal, food));
+    refresh();
   };
 
   const handleRemove = (mealId, index) => {
@@ -443,6 +625,25 @@ export default function Diet() {
 
       {/* Macro summary */}
       <MacroSummary totals={totals} goals={goals} />
+
+      {/* AI Meal Scanner quick access */}
+      <section className="section">
+        <h2 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Sparkles size={14} /> AI Meal Scanner
+        </h2>
+        <div className="scanner-quick-cards">
+          {MEALS.map((meal) => (
+            <button
+              key={meal.id}
+              className="scanner-quick-btn"
+              onClick={() => setScannerMeal(meal.id)}
+            >
+              <Camera size={16} color="var(--purple-light)" />
+              <span>{meal.emoji} {meal.label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Meals */}
       <section className="section">
@@ -585,6 +786,18 @@ export default function Diet() {
             <FoodSearch
               onAdd={(food) => handleAdd(searchMeal, food)}
               onClose={() => setSearch(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* AI Scanner drawer */}
+      {scannerMeal && (
+        <div className="drawer-backdrop" onClick={() => setScannerMeal(null)}>
+          <div className="drawer" onClick={(e) => e.stopPropagation()}>
+            <MealScanner
+              onAddFoods={handleScannerAdd}
+              onClose={() => setScannerMeal(null)}
             />
           </div>
         </div>
