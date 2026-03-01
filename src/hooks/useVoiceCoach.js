@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
+import { analyzeForm } from '../utils/geminiApi';
 
 const ELEVEN_VOICE = 'pNInz6obpgDQGcFmaJgB'; // Adam — deep, natural male
 
@@ -186,6 +187,9 @@ export function useVoiceCoach() {
   const [listening, setListening] = useState(false);
   const [lastReply, setLastReply] = useState('');
   const [muted, _setMuted] = useState(false);
+  const [formTip, setFormTip] = useState('');
+  const formIntervalRef = useRef(null);
+  const formAnalyzingRef = useRef(false);
 
   const setMuted = useCallback((val) => {
     const next = typeof val === 'function' ? val(mutedRef.current) : val;
@@ -224,21 +228,31 @@ export function useVoiceCoach() {
     busyRef.current = false;
   }, []);
 
+  const speakNow = useCallback(async (text) => {
+    if (!text || mutedRef.current || !mountedRef.current) return;
+    window.speechSynthesis?.cancel();
+    busyRef.current = true;
+    const timeout = setTimeout(() => { busyRef.current = false; }, 4000);
+    try { await speak(text); } catch (err) { console.warn('[VoiceCoach]', err.message); }
+    clearTimeout(timeout);
+    busyRef.current = false;
+  }, []);
+
   const feedFrame = useCallback((frameData) => {
     latestRef.current = frameData;
     if (!enabledRef.current || mutedRef.current || pausedRef.current) return;
 
     const isPlank = frameData.exercise === 'PLANK';
 
-    // Rep-based: announce the number when it changes
+    // Rep-based: announce the number when it changes (high priority — interrupts other speech)
     if (!isPlank && frameData.reps > lastRepRef.current) {
       lastRepRef.current = frameData.reps;
       const remaining = frameData.targetReps - frameData.reps;
       let text = `${frameData.reps}`;
-      if (remaining === 0) text = 'Done!';
+      if (remaining === 0) text = 'Complete!';
       else if (remaining === 1) text = `${frameData.reps}! Last one!`;
       else if (remaining <= 3) text = `${frameData.reps}! ${remaining} more!`;
-      speakCue(text);
+      speakNow(text);
     }
 
     // Plank: every 15 seconds
@@ -248,16 +262,16 @@ export function useVoiceCoach() {
       const remaining = target - sec;
       if (sec >= target && lastSecAnnounceRef.current < target) {
         lastSecAnnounceRef.current = sec;
-        speakCue('Done!');
+        speakNow('Complete!');
       } else if (remaining <= 5 && remaining > 0 && sec > lastSecAnnounceRef.current) {
         lastSecAnnounceRef.current = sec;
-        speakCue(`${remaining}`);
+        speakNow(`${remaining}`);
       } else if (sec > 0 && sec % 15 === 0 && sec > lastSecAnnounceRef.current) {
         lastSecAnnounceRef.current = sec;
-        speakCue(`${sec} seconds`);
+        speakNow(`${sec} seconds`);
       }
     }
-  }, [speakCue]);
+  }, [speakNow]);
 
   /** User taps mic → listen → send to Gemini → speak reply. Returns { transcript, reply } or null. */
   const talkToCoach = useCallback(async () => {
@@ -297,5 +311,36 @@ export function useVoiceCoach() {
     }
   }, [listening]);
 
-  return { feedFrame, talkToCoach, listening, lastReply, muted, setMuted, activate };
+  const runFormCheck = useCallback(async () => {
+    if (formAnalyzingRef.current || !latestRef.current || mutedRef.current) return;
+    formAnalyzingRef.current = true;
+    try {
+      const tip = await analyzeForm(latestRef.current);
+      if (tip && mountedRef.current) {
+        setFormTip(tip);
+        await speakCue(tip);
+      }
+    } catch { /* ignore */ }
+    formAnalyzingRef.current = false;
+  }, [speakCue]);
+
+  const startFormAnalysis = useCallback(() => {
+    stopFormAnalysis();
+    setTimeout(() => runFormCheck(), 2000);
+    formIntervalRef.current = setInterval(() => runFormCheck(), 2000);
+  }, [runFormCheck]);
+
+  const stopFormAnalysis = useCallback(() => {
+    if (formIntervalRef.current) {
+      clearInterval(formIntervalRef.current);
+      formIntervalRef.current = null;
+    }
+    formAnalyzingRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    return () => stopFormAnalysis();
+  }, [stopFormAnalysis]);
+
+  return { feedFrame, talkToCoach, listening, lastReply, muted, setMuted, activate, formTip, startFormAnalysis, stopFormAnalysis };
 }

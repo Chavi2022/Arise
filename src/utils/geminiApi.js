@@ -94,6 +94,39 @@ export async function analyzeMealText(description) {
   return parseNutritionResponse(text);
 }
 
+// ─── Live Form Analysis ──────────────────────────────────────────
+const FORM_PROMPT = `You are an expert personal trainer watching someone exercise via pose detection data. Based on the joint angles and exercise context provided, give ONE short, specific form tip or encouragement (max 12 words). Be conversational like a real coach mid-workout. Examples: "Deeper! Get those thighs parallel", "Great depth, keep it up!", "Straighten your back more", "Elbows closer to your body". Return ONLY the tip text, nothing else.`;
+
+export async function analyzeForm({ exercise, angle, reps, targetReps, seconds, targetSeconds, stage }) {
+  if (!GEMINI_API_KEY) return null;
+
+  const context = [
+    `Exercise: ${exercise}`,
+    angle != null ? `Current joint angle: ${angle}°` : null,
+    stage ? `Movement stage: ${stage}` : null,
+    reps != null ? `Reps completed: ${reps}/${targetReps}` : null,
+    seconds != null ? `Seconds held: ${seconds}/${targetSeconds}` : null,
+  ].filter(Boolean).join('\n');
+
+  try {
+    const res = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `${FORM_PROMPT}\n\n${context}` }] }],
+        generationConfig: { maxOutputTokens: 30, temperature: 0.9 },
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = (data.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim().replace(/^["']|["']$/g, '');
+    return text.length > 2 ? text : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseNutritionResponse(text) {
   const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
 
