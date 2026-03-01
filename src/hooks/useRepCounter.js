@@ -8,20 +8,40 @@ export function useRepCounter() {
 
   const stageRef = useRef(null);
   const repsRef = useRef(0);
+  const readyRef = useRef(false);
+  const stableFramesRef = useRef(0);
 
-  // Rep-based exercises (squat, push-up)
   const processRepAngle = useCallback((angle, exercise) => {
     if (angle === null || angle === undefined || !exercise) return;
     setCurrentAngle(Math.round(angle));
 
     const { upAngle, downAngle, upLabel, downLabel } = exercise;
 
+    // Require 5 stable frames in 'up' position before tracking
+    if (!readyRef.current) {
+      if (angle > upAngle) {
+        stableFramesRef.current += 1;
+        if (stableFramesRef.current >= 5) {
+          readyRef.current = true;
+          stageRef.current = 'up';
+          setStage('up');
+          setFeedback('Ready — go!');
+        } else {
+          setFeedback('Get in position!');
+        }
+      } else {
+        stableFramesRef.current = 0;
+        setFeedback('Get in position!');
+      }
+      return;
+    }
+
     if (angle > upAngle) {
       if (stageRef.current === 'down') {
         repsRef.current += 1;
         setReps(repsRef.current);
-        setFeedback('Rep complete! 🎉');
-      } else {
+        setFeedback('Rep complete!');
+      } else if (stageRef.current !== 'up') {
         setFeedback(downLabel ?? 'Start moving');
       }
       stageRef.current = 'up';
@@ -33,8 +53,11 @@ export function useRepCounter() {
       stageRef.current = 'down';
       setStage('down');
     } else {
-      const pct = Math.round(((angle - downAngle) / (upAngle - downAngle)) * 100);
-      setFeedback(stageRef.current === 'down' ? `Coming up… ${pct}%` : `Going down… ${100 - pct}%`);
+      if (stageRef.current === 'down') {
+        setFeedback('Coming up…');
+      } else if (stageRef.current === 'up') {
+        setFeedback('Going down…');
+      }
     }
   }, []);
 
@@ -45,6 +68,8 @@ export function useRepCounter() {
     setCurrentAngle(null);
     stageRef.current = null;
     repsRef.current = 0;
+    readyRef.current = false;
+    stableFramesRef.current = 0;
   }, []);
 
   return { reps, stage, feedback, currentAngle, processRepAngle, reset };

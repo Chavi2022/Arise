@@ -13,10 +13,10 @@ export const EXERCISES = {
         getAngle(lm, LANDMARKS.LEFT_SHOULDER, LANDMARKS.LEFT_ELBOW, LANDMARKS.LEFT_WRIST),
         getAngle(lm, LANDMARKS.RIGHT_SHOULDER, LANDMARKS.RIGHT_ELBOW, LANDMARKS.RIGHT_WRIST)
       ),
-    upAngle: 155,
-    downAngle: 90,
+    upAngle: 150,
+    downAngle: 60,
     upLabel: 'Push up!',
-    downLabel: 'Lower your chest',
+    downLabel: 'Go down',
     tips: ['Body in a straight line', 'Core tight the whole time', 'Full range of motion'],
   },
   SQUAT: {
@@ -31,10 +31,10 @@ export const EXERCISES = {
         getAngle(lm, LANDMARKS.LEFT_HIP, LANDMARKS.LEFT_KNEE, LANDMARKS.LEFT_ANKLE),
         getAngle(lm, LANDMARKS.RIGHT_HIP, LANDMARKS.RIGHT_KNEE, LANDMARKS.RIGHT_ANKLE)
       ),
-    upAngle: 165,
-    downAngle: 90,
-    upLabel: 'Stand tall',
-    downLabel: 'Go lower!',
+    upAngle: 160,
+    downAngle: 70,
+    upLabel: 'Stand tall!',
+    downLabel: 'Squat down',
     tips: ['Chest up, back straight', 'Knees track over toes', 'Drive through your heels'],
   },
   SIT_UP: {

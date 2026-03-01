@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import { Search, Plus, Trash2, X, Share2, ChevronDown, ChevronUp, Scale, TrendingDown, TrendingUp, Minus, Camera, Sparkles, Send, ImagePlus } from 'lucide-react';
 import {
   getDietLog, addFoodToMeal, removeFoodFromMeal,
-  getDietGoals, logWeight, getWeightHistory, saveDietGoals,
+  getDietGoals, logWeight, getWeightHistory,
 } from '../utils/storage';
 import { searchFood, QUICK_FOODS, macrosFor, sumMacros } from '../utils/nutritionApi';
 import { analyzeMealImage, analyzeMealText } from '../utils/geminiApi';
@@ -37,8 +37,6 @@ function MacroRing({ value, goal, color, size = 56, stroke = 6 }) {
 
 // ─── Calorie summary header ────────────────────────────────────────
 function MacroSummary({ totals, goals }) {
-  const calPct = Math.min((totals.calories / (goals.calories || 1)) * 100, 100);
-
   return (
     <div className="macro-summary-card">
       {/* Big calorie ring */}
@@ -525,7 +523,7 @@ function WeightChart({ history, goalKg }) {
 }
 
 // ─── Share ────────────────────────────────────────────────────────
-async function shareProgress(totals, weightHistory, repsThisWeek) {
+async function shareProgress(totals, weightHistory) {
   const today = new Date().toLocaleDateString('default', { weekday: 'long', month: 'short', day: 'numeric' });
   const latestWeight = Object.values(weightHistory).slice(-1)[0];
   const text =

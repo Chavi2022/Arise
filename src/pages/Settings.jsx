@@ -1,12 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { getApps, saveApps, getSettings, saveSettings, DEFAULT_APPS } from '../utils/storage';
 import { EXERCISE_LIST } from '../utils/exerciseConfig';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Key, Volume2 } from 'lucide-react';
+
+function getApiKey(key) { try { return localStorage.getItem(key) ?? ''; } catch { return ''; } }
 
 export default function Settings() {
   const [apps, setApps] = useState(getApps());
   const [settings, setSettings] = useState(getSettings());
   const [saved, setSaved] = useState(false);
+  const [geminiKey, setGeminiKey]     = useState(() => getApiKey('arise_gemini_key'));
+  const [elevenKey, setElevenKey]     = useState(() => getApiKey('arise_eleven_key'));
+  const [coachEnabled, setCoachEnabled] = useState(() => getApiKey('arise_coach_enabled') === 'true');
 
   const handleAppToggle = (id) => {
     setApps((prev) => prev.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a)));
@@ -34,6 +39,9 @@ export default function Settings() {
   const handleSave = () => {
     saveApps(apps);
     saveSettings(settings);
+    localStorage.setItem('arise_gemini_key', geminiKey);
+    localStorage.setItem('arise_eleven_key', elevenKey);
+    localStorage.setItem('arise_coach_enabled', coachEnabled ? 'true' : 'false');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -64,7 +72,7 @@ export default function Settings() {
                   />
                   <span className="toggle-track" />
                 </label>
-                <span className="app-emoji">{app.emoji}</span>
+                <img className="app-icon" src={app.icon} alt={app.name} />
                 <span className="app-name">{app.name}</span>
               </div>
               <div className="settings-row-right">
@@ -134,6 +142,52 @@ export default function Settings() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* AI Voice Coach */}
+      <section className="section">
+        <h2 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Volume2 size={16} /> AI Voice Coach
+        </h2>
+        <p className="section-desc">Enable real-time voice coaching during challenges using Gemini + ElevenLabs.</p>
+
+        <div className="settings-list settings-box">
+          <div className="settings-row">
+            <div className="settings-row-left">
+              <label className="toggle">
+                <input type="checkbox" checked={coachEnabled} onChange={() => setCoachEnabled(e => !e)} />
+                <span className="toggle-track" />
+              </label>
+              <span className="app-name">Enable voice coach</span>
+            </div>
+          </div>
+
+          <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+            <label className="api-key-label">
+              <Key size={13} /> Gemini API Key
+            </label>
+            <input
+              type="password"
+              className="api-key-input"
+              placeholder="AIza..."
+              value={geminiKey}
+              onChange={(e) => setGeminiKey(e.target.value)}
+            />
+          </div>
+
+          <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+            <label className="api-key-label">
+              <Key size={13} /> ElevenLabs API Key
+            </label>
+            <input
+              type="password"
+              className="api-key-input"
+              placeholder="sk_..."
+              value={elevenKey}
+              onChange={(e) => setElevenKey(e.target.value)}
+            />
+          </div>
         </div>
       </section>
 
