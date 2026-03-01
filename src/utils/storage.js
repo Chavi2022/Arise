@@ -20,8 +20,8 @@ export const DEFAULT_APPS = [
 
 export const DEFAULT_SETTINGS = {
   unlockMinutes: 15,
-  reps: { PUSH_UP: 3, SQUAT: 3, SIT_UP: 3 },
-  seconds: { PLANK: 3 },
+  reps: { PUSH_UP: 2, SQUAT: 2, SIT_UP: 2 },
+  seconds: { PLANK: 2 },
 };
 
 function todayKey() {
