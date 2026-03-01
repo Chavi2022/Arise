@@ -1,5 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 
+const DEBOUNCE_FRAMES = 4;
+const REP_COOLDOWN_MS = 800;
+
 export function useRepCounter() {
   const [reps, setReps] = useState(0);
   const [stage, setStage] = useState(null);
@@ -10,6 +13,10 @@ export function useRepCounter() {
   const repsRef = useRef(0);
   const readyRef = useRef(false);
   const stableFramesRef = useRef(0);
+  const downFramesRef = useRef(0);
+  const upFramesRef = useRef(0);
+  const lastRepTimeRef = useRef(0);
+  const hitDownRef = useRef(false);
 
   const processRepAngle = useCallback((angle, exercise) => {
     if (angle === null || angle === undefined || !exercise) return;
@@ -17,7 +24,6 @@ export function useRepCounter() {
 
     const { upAngle, downAngle, upLabel, downLabel } = exercise;
 
-    // Require 5 stable frames in 'up' position before tracking
     if (!readyRef.current) {
       if (angle > upAngle) {
         stableFramesRef.current += 1;
@@ -36,23 +42,33 @@ export function useRepCounter() {
       return;
     }
 
-    if (angle > upAngle) {
-      if (stageRef.current === 'down') {
-        repsRef.current += 1;
-        setReps(repsRef.current);
-        setFeedback('Rep complete!');
-      } else if (stageRef.current !== 'up') {
-        setFeedback(downLabel ?? 'Start moving');
-      }
-      stageRef.current = 'up';
-      setStage('up');
-    } else if (angle < downAngle) {
-      if (stageRef.current !== 'down') {
+    if (angle < downAngle) {
+      downFramesRef.current += 1;
+      upFramesRef.current = 0;
+      if (downFramesRef.current >= DEBOUNCE_FRAMES && stageRef.current !== 'down') {
+        stageRef.current = 'down';
+        hitDownRef.current = true;
+        setStage('down');
         setFeedback(upLabel ?? 'Come back up');
       }
-      stageRef.current = 'down';
-      setStage('down');
+    } else if (angle > upAngle) {
+      upFramesRef.current += 1;
+      downFramesRef.current = 0;
+      if (upFramesRef.current >= DEBOUNCE_FRAMES && stageRef.current !== 'up') {
+        const now = Date.now();
+        if (hitDownRef.current && (now - lastRepTimeRef.current) > REP_COOLDOWN_MS) {
+          repsRef.current += 1;
+          setReps(repsRef.current);
+          setFeedback('Rep complete!');
+          lastRepTimeRef.current = now;
+          hitDownRef.current = false;
+        }
+        stageRef.current = 'up';
+        setStage('up');
+      }
     } else {
+      downFramesRef.current = 0;
+      upFramesRef.current = 0;
       if (stageRef.current === 'down') {
         setFeedback('Coming up…');
       } else if (stageRef.current === 'up') {
@@ -70,6 +86,10 @@ export function useRepCounter() {
     repsRef.current = 0;
     readyRef.current = false;
     stableFramesRef.current = 0;
+    downFramesRef.current = 0;
+    upFramesRef.current = 0;
+    lastRepTimeRef.current = 0;
+    hitDownRef.current = false;
   }, []);
 
   return { reps, stage, feedback, currentAngle, processRepAngle, reset };

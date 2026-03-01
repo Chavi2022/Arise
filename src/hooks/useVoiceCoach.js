@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
+import { analyzeForm } from '../utils/geminiApi';
 
 const ELEVEN_VOICE = 'pNInz6obpgDQGcFmaJgB'; // Adam — deep, natural male
 
@@ -203,6 +204,9 @@ export function useVoiceCoach() {
   const [listening, setListening] = useState(false);
   const [lastReply, setLastReply] = useState('');
   const [muted, _setMuted] = useState(false);
+  const [formTip, setFormTip] = useState('');
+  const formIntervalRef = useRef(null);
+  const formAnalyzingRef = useRef(false);
 
   const setMuted = useCallback((val) => {
     const next = typeof val === 'function' ? val(mutedRef.current) : val;
@@ -311,7 +315,7 @@ export function useVoiceCoach() {
         speakCount(`${remaining}`);
       } else if (sec > 0 && sec % 15 === 0 && sec > lastSecAnnounceRef.current) {
         lastSecAnnounceRef.current = sec;
-        speakCue(`${sec} seconds`);
+        speakNow(`${sec} seconds`);
       }
     }
   }, [speakCue, speakCount]);
@@ -354,5 +358,36 @@ export function useVoiceCoach() {
     }
   }, [listening]);
 
-  return { feedFrame, talkToCoach, listening, lastReply, muted, setMuted, activate };
+  const runFormCheck = useCallback(async () => {
+    if (formAnalyzingRef.current || !latestRef.current || mutedRef.current) return;
+    formAnalyzingRef.current = true;
+    try {
+      const tip = await analyzeForm(latestRef.current);
+      if (tip && mountedRef.current) {
+        setFormTip(tip);
+        await speakCue(tip);
+      }
+    } catch { /* ignore */ }
+    formAnalyzingRef.current = false;
+  }, [speakCue]);
+
+  const startFormAnalysis = useCallback(() => {
+    stopFormAnalysis();
+    setTimeout(() => runFormCheck(), 2000);
+    formIntervalRef.current = setInterval(() => runFormCheck(), 2000);
+  }, [runFormCheck]);
+
+  const stopFormAnalysis = useCallback(() => {
+    if (formIntervalRef.current) {
+      clearInterval(formIntervalRef.current);
+      formIntervalRef.current = null;
+    }
+    formAnalyzingRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    return () => stopFormAnalysis();
+  }, [stopFormAnalysis]);
+
+  return { feedFrame, talkToCoach, listening, lastReply, muted, setMuted, activate, formTip, startFormAnalysis, stopFormAnalysis };
 }
